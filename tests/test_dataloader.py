@@ -19,8 +19,8 @@ def test_dataset(glm_data_file, glm_tokenizer):
     assert len(ds) == len(data)
 
 
-@pytest.mark.parametrize("max_len,expected",[
-    (5, 8), 
+@pytest.mark.parametrize("max_len,expected", [
+    (5, 8),
     (128, 10),
 ])
 def test_dataset_max_len(glm_tokenizer, max_len, expected):
@@ -110,8 +110,9 @@ def test_data_loader(glm_dataloader, func, expected, batch_size):
     assert isinstance(out, expected)
     if isinstance(out, DataLoader):
         dataloader = out
-        num_batches = 50 // batch_size
-        if 50 % batch_size != 0:
+        data_len = len(glm_dataloader)
+        num_batches = data_len // batch_size
+        if data_len % batch_size != 0:
             num_batches += 1
         assert len(dataloader) == num_batches
     else:

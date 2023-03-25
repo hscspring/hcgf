@@ -35,10 +35,11 @@ class GlmDataLoader:
             data.append(js)
         return data
 
-    def _split(self,
-               data: List[Dict],
-               test_size: float) -> Tuple[List[Dict],
-                                          List[Dict]]:
+    def _split(
+        self,
+        data: List[Dict],
+        test_size: float
+    ) -> Tuple[List[Dict], List[Dict]]:
         total = len(data)
         test_num = int(total * test_size)
         assert test_num < total, f"{self}: test number must less than total number"
@@ -52,11 +53,12 @@ class GlmDataLoader:
         return d1, d2
 
     def train_dev_split(
-        self, 
+        self,
         batch_size: int,
     ) -> Tuple[DataLoader, DataLoader]:
         train, dev = self._split(self.data, test_size=0.1)
-        train_dataset = GlmMapStyleDataset(train, self.tokenizer, self.max_seq_len)
+        train_dataset = GlmMapStyleDataset(
+            train, self.tokenizer, self.max_seq_len)
         dev_dataset = GlmMapStyleDataset(dev, self.tokenizer, self.max_seq_len)
         tdl = self._build_dataloader(train_dataset, batch_size, True)
         ddl = self._build_dataloader(dev_dataset, batch_size, True)
@@ -82,3 +84,6 @@ class GlmDataLoader:
             batch_size=batch_size,
             pin_memory=True)
         return dataloader
+
+    def __len__(self) -> int:
+        return len(self.data)
