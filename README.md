@@ -40,13 +40,14 @@ gl.load_data("./data/chatgpt_finetune_faq.json").tune()
 import hcgf
 gl = hcgf.GlmLora("THUDM/chatglm-6b", device="cuda:0", infer_mode=True)
 gl.load_pretrained("/path/to/lora_pt").eval()
-inp = "你是谁？"
-gl.chat(inp)
+gl.chat("你是谁?")
 ```
 
 ### 8bit微调
 
 至少需要一张12G显存的卡。不指定device。
+
+需要安装依赖: `bitsandbytes`
 
 ```python
 # 微调
@@ -57,8 +58,7 @@ gl.load_data("./data/chatgpt_finetune_faq.json").tune()
 # 推理
 gl = hcgf.GlmLora("THUDM/chatglm-6b", load_in_8bit=True, infer_mode=True)
 gl.load_pretrained("/path/to/lora_pt").eval()
-inp = "你是谁？"
-gl.chat(inp)
+gl.chat("你是谁?")
 ```
 
 ### 配置
