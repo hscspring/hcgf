@@ -37,7 +37,7 @@ data_path = "/path/to/json_data/"
 model_id = "THUDM/chatglm-6b"
 device = "cuda:0"
 model = GlmLora(model_id, device=device)
-model.load_data(data_path).tune(device)
+model.load_data(data_path).tune()
 
 # 推理
 from hcgf.sft import GlmLora

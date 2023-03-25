@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 
 
-def print_trainable_parameters(model: nn.Module):
+def print_trainable_parameters(model: nn.Module) -> None:
     """
     Prints the number of trainable parameters in the model.
     """
@@ -17,6 +17,11 @@ def print_trainable_parameters(model: nn.Module):
     msg = f"trainable params: {trainable_params} || all params: {all_param} "
     msg += f"\ntrainable%: {100 * trainable_params / all_param}"
     print(msg)
+
+
+def print_layer_info(model: nn.Module) -> None:
+    for key, val in model.named_parameters():
+        print(key, val.dtype, val.device)
 
 
 def get_lora_state_dict(

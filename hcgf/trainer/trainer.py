@@ -1,5 +1,6 @@
 import time
 import os
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -19,7 +20,7 @@ class Trainer:
         warmup_steps: int,
         accumulate_steps: int,
         out_dir: str,
-        device: str,
+        device: Optional[str],
     ):
         self.lr = lr
         self.num_epochs = num_epochs
@@ -81,9 +82,13 @@ class Trainer:
             train_loss = 0
             print(f"\n\nEpoch {epoch}/{self.num_epochs}")
             for step, batch in enumerate(train_dataloader, start=1):
-                batch = {k: v.to(self.device) for k, v in batch.items()}
+                if self.device is not None:
+                    batch = {k: v.to(self.device) for k, v in batch.items()}
+                    dtype = torch.float16
+                else:
+                    dtype = torch.bfloat16
                 # mix precision
-                with torch.cuda.amp.autocast():
+                with torch.cuda.amp.autocast(dtype=dtype):
                     output = model(**batch)
                 loss_b = output.loss.detach().float()
                 train_loss += loss_b
@@ -149,8 +154,12 @@ class Trainer:
         steps = 0
         for step, batch in enumerate(dataloader, start=1):
             steps += 1
-            batch = {k: v.to(self.device) for k, v in batch.items()}
-            with torch.cuda.amp.autocast():
+            if self.device is not None:
+                batch = {k: v.to(self.device) for k, v in batch.items()}
+                dtype = torch.float16
+            else:
+                dtype = torch.bfloat16
+            with torch.cuda.amp.autocast(dtype=dtype):
                 with torch.no_grad():
                     output = model(**batch)
             loss_b = output.loss

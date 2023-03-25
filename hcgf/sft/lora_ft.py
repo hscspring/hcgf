@@ -1,6 +1,8 @@
 from typing import Optional, List
 
 import torch
+import torch.nn as nn
+from transformers.modeling_utils import PreTrainedModel
 from peft import get_peft_model, LoraConfig, TaskType
 
 from ..utils import print_trainable_parameters
@@ -11,20 +13,32 @@ from ..trainer import Trainer
 from .chatglm import ChatGLMForConditionalGeneration, ChatGLMTokenizer
 
 
+class CastOutputToFloat(nn.Sequential):
+    def forward(self, x): 
+        return super().forward(x).to(torch.float32)
+
+
 class GlmLora:
 
     def __init__(
         self,
         model_id: str,
-        device: str,
+        device: Optional[str] = None,
         lora_r: int = 8,
         lora_alpha: int = 32,
         lora_dropout: float = 0.1,
+        load_in_8bit: bool = False,
     ):
         print(f"Loading tokenizer and model of {model_id}")
+        self.load_in_8bit = load_in_8bit
+        if self.load_in_8bit:
+            import bitsandbytes as bnb
+            self.device = None
+            model = self._load_8bit_glm(model_id)
+        else:
+            self.device = device
+            model = self._load_glm(model_id)
         self.tokenizer = ChatGLMTokenizer.from_pretrained(model_id)
-        model = ChatGLMForConditionalGeneration.from_pretrained(
-            model_id).to(device)
         self.config = LoraConfig(
             # peft config
             peft_type="LORA",
@@ -38,10 +52,27 @@ class GlmLora:
             enable_lora=[True, False, True],
             bias="none",
         )
-        self.device = device
         print("Processing peft model")
         self.model = get_peft_model(model, self.config)
         print_trainable_parameters(self.model)
+    
+    def _load_8bit_glm(self, model_id: str) -> PreTrainedModel:
+        model = ChatGLMForConditionalGeneration.from_pretrained(
+            model_id, load_in_8bit=True, device_map="auto")
+        for param in model.parameters():
+            param.requires_grad = False
+            if param.ndim == 1:
+                # cast the small parameters (e.g. layernorm, bias) to fp32 for stability
+                param.data = param.data.to(torch.float32)
+        model.lm_head = CastOutputToFloat(model.lm_head)
+        return model
+    
+    def _load_glm(self, model_id: str) -> PreTrainedModel:
+        model = ChatGLMForConditionalGeneration.from_pretrained(
+            model_id).to(self.device)
+        for param in model.parameters():
+            param.requires_grad = False
+        return model
 
     def load_pretrained(self, pt_path: str):
         static = torch.load(pt_path)
@@ -55,12 +86,11 @@ class GlmLora:
 
     def tune(
         self,
-        device: str,
         batch_size: int = 1,
         lr: float = 2e-4,
         num_epochs: int = 10,
         warmup_steps: Optional[int] = None,
-        accumulate_steps: Optional[int] = 32,
+        accumulate_steps: Optional[int] = 8,
         out_dir: str = "./output/",
     ):
         """
@@ -69,7 +99,12 @@ class GlmLora:
         if `warmup_steps` is None, will use one epoch to warmup by default
         if `accumulate_steps` is None, will use 1 as default
         """
-        self.model.to(self.device).train()
+        # turnoff when infer
+        self.model.config.use_cache = False
+        if self.device is not None:
+            self.model.to(self.device).train()
+        else:
+            self.model.train()
         trainer = Trainer(
             lr,
             num_epochs,
