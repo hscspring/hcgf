@@ -14,7 +14,7 @@ from .chatglm import ChatGLMForConditionalGeneration, ChatGLMTokenizer
 
 
 class CastOutputToFloat(nn.Sequential):
-    def forward(self, x): 
+    def forward(self, x):
         return super().forward(x).to(torch.float32)
 
 
@@ -62,10 +62,11 @@ class GlmLora:
         for param in model.parameters():
             param.requires_grad = False
             if param.ndim == 1:
-                # cast the small parameters (e.g. layernorm, bias) to fp32 for stability
+                # cast the small parameters (e.g. layernorm, bias) to fp32 for
+                # stability
                 param.data = param.data.to(dtype)
         return model
-    
+
     def _load_8bit_glm(self, model_id: str) -> PreTrainedModel:
         model = ChatGLMForConditionalGeneration.from_pretrained(
             model_id, load_in_8bit=True, device_map="auto")
@@ -76,7 +77,7 @@ class GlmLora:
         model = self.__cast_to(model, dtype)
         model.lm_head = CastOutputToFloat(model.lm_head)
         return model
-    
+
     def _load_glm(self, model_id: str) -> PreTrainedModel:
         model = ChatGLMForConditionalGeneration.from_pretrained(
             model_id).to(self.device)
@@ -110,7 +111,7 @@ class GlmLora:
         if `warmup_steps` is None, will use one epoch to warmup by default
         if `accumulate_steps` is None, will use 1 as default
         """
-        # turnoff when infer
+        # turn on when infer
         self.model.config.use_cache = False
         if self.device is not None:
             self.model.to(self.device).train()
@@ -139,6 +140,7 @@ class GlmLora:
         if quant_bit is not None:
             self.model.quantize(quant_bit)
 
+        # 8bit do not use device, device is None
         if self.device is not None:
             self.model.to(self.device).eval()
         else:
@@ -149,7 +151,7 @@ class GlmLora:
             history = []
         res = []
         for response, history in self.model.stream_chat(
-            self.tokenizer, inp, history, max_len):
+                self.tokenizer, inp, history, max_len):
             query, response = history[-1]
             res.append(response)
         answer = "".join(response)
