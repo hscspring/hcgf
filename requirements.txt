@@ -1,6 +1,5 @@
-transformers
-peft
-numpy
-pnlp
 icetk
 cpm_kernels
+peft
+transformers
+pnlp
