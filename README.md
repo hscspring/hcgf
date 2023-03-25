@@ -18,7 +18,7 @@ data_path = "/path/to/json_data/"
 model_id = "THUDM/chatglm-6b"
 device = "cuda:0"
 model = GlmLora(model_id, device=device)
-model.load_data(data_path).tune_with(device)
+model.load_data(data_path).tune(device)
 
 # 推理
 from hchg.sft import GlmLora
@@ -29,14 +29,3 @@ model.load_pretrained("/path/to/lora_pt").eval()
 inp = "你是谁？"
 model.chat(inp)
 ```
-
-### 量化微调
-
-
-
-
-## 数据集
-
-法律问答，共3.6w条，筛选后（取最佳答案）18238条。
-
-来自：https://github.com/SophonPlus/ChineseNlpCorpus/blob/master/datasets/lawzhidao/intro.ipynb

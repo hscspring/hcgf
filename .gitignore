@@ -1,7 +1,8 @@
 output/
+data/
+memo.txt
 test_output/
 bitsandbytes_git/
-data/
 lab/
 dsc_*
 *.log
