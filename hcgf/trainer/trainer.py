@@ -13,7 +13,7 @@ from ..utils import get_lora_state_dict
 class Trainer:
 
     def __init__(
-        self, 
+        self,
         lr: float,
         num_epochs: int,
         warmup_steps: int,
@@ -30,8 +30,8 @@ class Trainer:
 
     def train(
         self,
-        model: nn.Module, 
-        train_dataloader: DataLoader, 
+        model: nn.Module,
+        train_dataloader: DataLoader,
         dev_dataloader: DataLoader
     ) -> None:
         ckpt_path = os.path.join(self.out_dir, "ckpt")
@@ -53,12 +53,12 @@ class Trainer:
         else:
             warmup_update_steps = self.warmup_steps
         total_update_steps = epoch_update_steps * self.num_epochs
-        
+
         # stops when 3 epochs do not improve
         early_stop_steps = 3 * batch_num
         # every 1/3 epoch do evaluation
         valid_steps = int(batch_num / 3)
-        
+
         msg = f"Total data batches: {batch_num}, "
         msg += f"Epoch update steps: {epoch_update_steps}, "
         msg += f"Total update steps: {total_update_steps}, "
@@ -95,13 +95,13 @@ class Trainer:
                     optimizer.step()
                     lr_scheduler.step()
                     optimizer.zero_grad()
-                
+
                 if step % print_every == 0:
                     msg = f"Step: {step}, "
                     msg += f"Loss: {train_loss/step:.4f}, "
                     msg += f"LearningRate: {lr_scheduler.get_last_lr()[0]:.6f} "
                     print(msg)
-                
+
                 if total_step % valid_steps == 0 and valid_steps < batch_num:
                     model.eval()
                     val_loss = self.eval(model, dev_dataloader)
@@ -121,11 +121,11 @@ class Trainer:
                     print(msg)
 
                     model.train()
-            
+
                 if total_step - last_improve > early_stop_steps:
                     print("Early stop for no improvements...")
                     flag = True
-            
+
             secs = int(time.perf_counter() - start_time)
             mins = secs / 60
             secs = secs % 60
@@ -139,11 +139,11 @@ class Trainer:
 
             if flag:
                 break
-        
+
         out_file_name = f"lora-ckpt-{total_step}.pt"
         out_file_path = os.path.join(ckpt_path, out_file_name)
         torch.save(get_lora_state_dict(model), out_file_path)
-    
+
     def eval(self, model: nn.Module, dataloader: DataLoader) -> float:
         total_loss = 0
         steps = 0

@@ -19,7 +19,8 @@ def print_trainable_parameters(model: nn.Module):
     print(msg)
 
 
-def get_lora_state_dict(model: nn.Module, bias: str = "none") -> Dict[str, torch.Tensor]:
+def get_lora_state_dict(
+        model: nn.Module, bias: str = "none") -> Dict[str, torch.Tensor]:
     """
     From https://github.com/microsoft/LoRA/
     """
@@ -27,13 +28,14 @@ def get_lora_state_dict(model: nn.Module, bias: str = "none") -> Dict[str, torch
     if bias == "none":
         return {k: my_state_dict[k] for k in my_state_dict if "lora_" in k}
     elif bias == "all":
-        return {k: my_state_dict[k] for k in my_state_dict if "lora_" in k or "bias" in k}
+        return {k: my_state_dict[k]
+                for k in my_state_dict if "lora_" in k or "bias" in k}
     elif bias == "lora_only":
         to_return = {}
         for k in my_state_dict:
             if "lora_" in k:
                 to_return[k] = my_state_dict[k]
-                bias_name = k.split("lora_")[0]+"bias"
+                bias_name = k.split("lora_")[0] + "bias"
                 if bias_name in my_state_dict:
                     to_return[bias_name] = my_state_dict[bias_name]
         return to_return

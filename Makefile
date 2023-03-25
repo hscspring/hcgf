@@ -1,4 +1,9 @@
-PY = python
+USER := $(shell whoami)
+ifeq ($(USER), Yam)
+	PY = python3.8
+else
+	PY = python
+endif
 
 .PHONY: test
 test:
@@ -15,4 +20,4 @@ upload:
 
 .PHONY: clean
 clean:
-	@rm -rf ./dist/ ./build/ ./pnlp.egg-info/
+	@rm -rf build dist *.egg-info

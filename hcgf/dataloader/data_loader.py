@@ -1,5 +1,4 @@
 from typing import List, Dict, Tuple
-from pathlib import Path
 import json
 
 import numpy as np
@@ -14,10 +13,9 @@ from .data_collector import GlmDataCollector
 
 class GlmDataLoader:
 
-
     def __init__(
-        self, 
-        data_path: str, 
+        self,
+        data_path: str,
         tokenizer: PreTrainedTokenizer,
         pattern: str = "*.json",
         input_dtype: torch.Type = torch.int64,
@@ -26,7 +24,7 @@ class GlmDataLoader:
         self.pattern = pattern
         self.input_dtype = input_dtype
         self.data = self._read_files(data_path)
-    
+
     def _read_files(self, data_path: str) -> List[Dict]:
         data = []
         reader = Reader(self.pattern)
@@ -34,8 +32,11 @@ class GlmDataLoader:
             js = json.loads(line.text.strip())
             data.append(js)
         return data
-    
-    def _split(self, data: List[Dict], test_size: float) -> Tuple[List[Dict], List[Dict]]:
+
+    def _split(self,
+               data: List[Dict],
+               test_size: float) -> Tuple[List[Dict],
+                                          List[Dict]]:
         total = len(data)
         test_num = int(total * test_size)
         assert test_num < total, f"{self}: test number must less than total number"
@@ -47,31 +48,33 @@ class GlmDataLoader:
             else:
                 d1.append(v)
         return d1, d2
-    
-    def train_dev_split(self, batch_size: int) -> Tuple[DataLoader, DataLoader]:
+
+    def train_dev_split(
+            self, batch_size: int) -> Tuple[DataLoader, DataLoader]:
         train, dev = self._split(self.data, test_size=0.1)
         train_dataset = GlmMapStyleDataset(train, self.tokenizer)
         dev_dataset = GlmMapStyleDataset(dev, self.tokenizer)
         tdl = self._build_dataloader(train_dataset, batch_size, True)
         ddl = self._build_dataloader(dev_dataset, batch_size, True)
         return tdl, ddl
-    
+
     def load(self, batch_size: int, shuffle: bool = True):
         ds = GlmMapStyleDataset(self.data, self.tokenizer)
         dl = self._build_dataloader(ds, batch_size, shuffle)
         return dl
-    
+
     def _build_dataloader(
-        self, 
-        dataset: GlmMapStyleDataset, 
-        batch_size: int, 
+        self,
+        dataset: GlmMapStyleDataset,
+        batch_size: int,
         shuffle: bool
     ) -> DataLoader:
         dataloader = DataLoader(
             dataset,
-            shuffle=shuffle, 
-            collate_fn=lambda batch: GlmDataCollector.collate_fn(batch, input_dtype=self.input_dtype), 
-            batch_size=batch_size, 
-            pin_memory=True
-        )
+            shuffle=shuffle,
+            collate_fn=lambda batch: GlmDataCollector.collate_fn(
+                batch,
+                input_dtype=self.input_dtype),
+            batch_size=batch_size,
+            pin_memory=True)
         return dataloader

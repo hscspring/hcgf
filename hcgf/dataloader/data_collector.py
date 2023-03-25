@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import List
 import torch
 
 
@@ -36,11 +36,11 @@ class GlmDataCollector:
 
     @classmethod
     def get_position_ids(
-        cls, 
-        longest_seq_len: int, 
-        cxt_len: int, 
-        mask_position: int, 
-        use_gmask: bool, 
+        cls,
+        longest_seq_len: int,
+        cxt_len: int,
+        mask_position: int,
+        use_gmask: bool,
         position_encoding_2d: bool = True,
         dtype=torch.int64,
     ):
@@ -55,16 +55,17 @@ class GlmDataCollector:
                 torch.zeros(cxt_len, dtype=dtype),
                 torch.arange(longest_seq_len - cxt_len, dtype=dtype) + 1
             ))
-            position_ids = torch.stack((position_ids, block_position_ids), dim=0)
+            position_ids = torch.stack(
+                (position_ids, block_position_ids), dim=0)
         else:
-            if not gmask:
-                position_ids[longest_seq_len-1:] = mask_position
+            if not use_gmask:
+                position_ids[longest_seq_len - 1:] = mask_position
         return position_ids
 
     @classmethod
     def collate_fn(
-        cls, 
-        data_items: List[DataItem], 
+        cls,
+        data_items: List[DataItem],
         input_dtype: torch.Type = torch.int64
     ) -> GlmBatchInput:
         len_ids = [len(v.input_ids) for v in data_items]
@@ -74,7 +75,8 @@ class GlmDataCollector:
         pid_list = []
         label_list = []
         # 长的在前
-        for seq_len, item in sorted(zip(len_ids, data_items), key=lambda x: -x[0]):
+        for seq_len, item in sorted(
+                zip(len_ids, data_items), key=lambda x: -x[0]):
             ids = item.input_ids
             cxt_len = item.cxt_len
 
@@ -88,14 +90,13 @@ class GlmDataCollector:
             # equal to cxt_len - 1
             cxt_idx = ids.index(150004)
             _pids = cls.get_position_ids(
-                longest_seq_len, cxt_idx, mask_position, use_gmask, 
+                longest_seq_len, cxt_idx, mask_position, use_gmask,
                 position_encoding_2d=True, dtype=input_dtype
             )
 
             padding_len = longest_seq_len - seq_len
-            _labels = (
-                [-100] * (cxt_len - 1) + ids[(cxt_len - 1) :] + [-100] * padding_len
-            )
+            _labels = ([-100] * (cxt_len - 1) +
+                       ids[(cxt_len - 1):] + [-100] * padding_len)
             # 20002 == eos_token_id
             _ids = ids + [20002] * padding_len
 

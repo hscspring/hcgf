@@ -23,16 +23,16 @@ arr_dtype = np.int64
 
 input_ids = np.array(
     [
-        [ 20005,  94874,  94874,  94874, 150001, 150004,  20005,  88443, 20002],
-        [ 20005,  94874, 150001, 150004,  20005,  84480,  20002,  20002, 20002],
+        [20005, 94874, 94874, 94874, 150001, 150004, 20005, 88443, 20002],
+        [20005, 94874, 150001, 150004, 20005, 84480, 20002, 20002, 20002],
     ],
     dtype=arr_dtype
 )
 
 labels = np.array(
     [
-        [  -100,   -100,   -100,   -100,   -100, 150004,  20005,  88443,  20002],
-        [  -100,   -100,   -100, 150004,  20005,  84480,  20002,   -100,   -100],
+        [-100, -100, -100, -100, -100, 150004, 20005, 88443, 20002],
+        [-100, -100, -100, 150004, 20005, 84480, 20002, -100, -100],
     ],
     dtype=arr_dtype
 )
@@ -49,23 +49,23 @@ position_ids = np.array(
 
 attention_mask = np.array(
     [
-        [[[False, False, False, False, False,  True,  True,  True,  True],
-          [False, False, False, False, False,  True,  True,  True,  True],
-          [False, False, False, False, False,  True,  True,  True,  True],
-          [False, False, False, False, False,  True,  True,  True,  True],
-          [False, False, False, False, False,  True,  True,  True,  True],
-          [False, False, False, False, False, False,  True,  True,  True],
-          [False, False, False, False, False, False, False,  True,  True],
-          [False, False, False, False, False, False, False, False,  True],
+        [[[False, False, False, False, False, True, True, True, True],
+          [False, False, False, False, False, True, True, True, True],
+          [False, False, False, False, False, True, True, True, True],
+          [False, False, False, False, False, True, True, True, True],
+          [False, False, False, False, False, True, True, True, True],
+          [False, False, False, False, False, False, True, True, True],
+          [False, False, False, False, False, False, False, True, True],
+          [False, False, False, False, False, False, False, False, True],
           [False, False, False, False, False, False, False, False, False]]],
-        [[[False, False, False,  True,  True,  True,  True,  True,  True],
-          [False, False, False,  True,  True,  True,  True,  True,  True],
-          [False, False, False,  True,  True,  True,  True,  True,  True],
-          [False, False, False, False,  True,  True,  True,  True,  True],
-          [False, False, False, False, False,  True,  True,  True,  True],
-          [False, False, False, False, False, False,  True,  True,  True],
-          [False, False, False, False, False, False, False,  True,  True],
-          [False, False, False, False, False, False, False, False,  True],
+        [[[False, False, False, True, True, True, True, True, True],
+          [False, False, False, True, True, True, True, True, True],
+          [False, False, False, True, True, True, True, True, True],
+          [False, False, False, False, True, True, True, True, True],
+          [False, False, False, False, False, True, True, True, True],
+          [False, False, False, False, False, False, True, True, True],
+          [False, False, False, False, False, False, False, True, True],
+          [False, False, False, False, False, False, False, False, True],
           [False, False, False, False, False, False, False, False, False]]],
     ],
     dtype=np.bool_
@@ -84,7 +84,6 @@ def test_data_collector(mocked_dataset, inp_key, shape, expected):
     val = binp[inp_key]
     assert tuple(val.shape) == shape
     assert np.alltrue(val.numpy() == expected)
-
 
 
 @pytest.mark.parametrize("func,expected", [
@@ -117,11 +116,10 @@ def test_data_loader(glm_dataloader, func, expected, batch_size):
 ])
 def test_dataset_collector(glm_tokenizer, inp_key, shape):
     data = [
-       {"prompt": "你好", "completion": "谁"},
+        {"prompt": "你好", "completion": "谁"},
     ]
     ds = GlmMapStyleDataset(data, glm_tokenizer)
     print(ds)
     binp = GlmDataCollector.collate_fn(ds)
     val = binp[inp_key]
     assert tuple(val.shape) == shape
-

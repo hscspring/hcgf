@@ -18,7 +18,7 @@ class Model(nn.Module):
         self.mlp = nn.Linear(10, 2)
         self.dropout = nn.Dropout(0.1)
         self.softmax = nn.LogSoftmax(dim=1)
-    
+
     def forward(self, input_ids, labels):
         z = self.mlp(input_ids)
         z = self.dropout(z)
@@ -29,8 +29,14 @@ class Model(nn.Module):
 
 loss_fn = nn.NLLLoss()
 
-gen_inp = lambda : torch.randn(2, 10)
-gen_oup = lambda : torch.randint(0, 2, (2,))
+
+def gen_inp():
+    return torch.randn(2, 10)
+
+
+def gen_oup():
+    return torch.randint(0, 2, (2,))
+
 
 train_loader = [
     {
@@ -47,5 +53,11 @@ model = Model()
 @pytest.mark.parametrize("warmup_steps", [None, 10])
 @pytest.mark.parametrize("accumulate_steps", [1, 8])
 def test_trainer(lr, num_epochs, warmup_steps, accumulate_steps):
-    trainer = Trainer(lr, num_epochs, warmup_steps, accumulate_steps, "test_output/", "cpu")
+    trainer = Trainer(
+        lr,
+        num_epochs,
+        warmup_steps,
+        accumulate_steps,
+        "test_output/",
+        "cpu")
     trainer.train(model, train_loader, train_loader)

@@ -12,14 +12,12 @@ Hidden = NewType("Hidden", int)
 ND = NewType("ND", int)
 
 GlmBatchInput = TypedDict(
-    "GlmBatchInput", 
+    "GlmBatchInput",
     input_ids=Annotated[torch.LongTensor, Tuple[Batch, SeqLen]],
     position_ids=Optional[Annotated[torch.LongTensor, Tuple[Batch, ND, SeqLen]]],
     attention_mask=Optional[Annotated[torch.BoolTensor, Tuple[Batch, ND, SeqLen, SeqLen]]],
     labels=Annotated[torch.LongTensor, Tuple[Batch, SeqLen]],
 )
-
-
 
 
 @dataclass
