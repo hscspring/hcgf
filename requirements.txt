@@ -1,0 +1,6 @@
+transformers
+peft
+numpy
+pnlp
+icetk
+cpm_kernels
