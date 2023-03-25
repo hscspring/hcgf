@@ -6,7 +6,7 @@ bitsandbytes_git/
 lab/
 dsc_*
 *.log
-*.ipynb
+# *.ipynb
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
