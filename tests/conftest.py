@@ -23,7 +23,7 @@ def glm_tokenizer():
 
 @pytest.fixture
 def glm_dataloader(glm_data_file):
-    return GlmDataLoader(glm_data_file, tokenizer)
+    return GlmDataLoader(glm_data_file, tokenizer, 64)
 
 
 @pytest.fixture

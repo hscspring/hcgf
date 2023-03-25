@@ -59,5 +59,7 @@ def test_trainer(lr, num_epochs, warmup_steps, accumulate_steps):
         warmup_steps,
         accumulate_steps,
         "test_output/",
-        "cpu")
+        "cpu",
+        10,
+    )
     trainer.train(model, train_loader, train_loader)

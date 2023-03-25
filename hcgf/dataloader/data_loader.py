@@ -17,10 +17,12 @@ class GlmDataLoader:
         self,
         data_path: str,
         tokenizer: PreTrainedTokenizer,
+        max_seq_len: int,
         pattern: str = "*.json",
         input_dtype: torch.Type = torch.int64,
     ):
         self.tokenizer = tokenizer
+        self.max_seq_len = max_seq_len
         self.pattern = pattern
         self.input_dtype = input_dtype
         self.data = self._read_files(data_path)
@@ -50,16 +52,18 @@ class GlmDataLoader:
         return d1, d2
 
     def train_dev_split(
-            self, batch_size: int) -> Tuple[DataLoader, DataLoader]:
+        self, 
+        batch_size: int,
+    ) -> Tuple[DataLoader, DataLoader]:
         train, dev = self._split(self.data, test_size=0.1)
-        train_dataset = GlmMapStyleDataset(train, self.tokenizer)
-        dev_dataset = GlmMapStyleDataset(dev, self.tokenizer)
+        train_dataset = GlmMapStyleDataset(train, self.tokenizer, self.max_seq_len)
+        dev_dataset = GlmMapStyleDataset(dev, self.tokenizer, self.max_seq_len)
         tdl = self._build_dataloader(train_dataset, batch_size, True)
         ddl = self._build_dataloader(dev_dataset, batch_size, True)
         return tdl, ddl
 
     def load(self, batch_size: int, shuffle: bool = True):
-        ds = GlmMapStyleDataset(self.data, self.tokenizer)
+        ds = GlmMapStyleDataset(self.data, self.tokenizer, self.max_seq_len)
         dl = self._build_dataloader(ds, batch_size, shuffle)
         return dl
 

@@ -1140,6 +1140,8 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
             outputs = outputs.tolist()[0][len(input_ids["input_ids"][0]):]
             response = tokenizer.decode(outputs)
             response = self.process_response(response)
+            if "\n\n" in response or " 问题" in response or "问题：" in response:
+                break
             new_history = history + [(query, response)]
             yield response, new_history
 
@@ -1232,7 +1234,7 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
                 next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
             else:
                 next_tokens = torch.argmax(probs, dim=-1)
-
+            
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
             model_kwargs = self._update_model_kwargs_for_generation(

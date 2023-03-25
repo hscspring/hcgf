@@ -19,6 +19,20 @@ def test_dataset(glm_data_file, glm_tokenizer):
     assert len(ds) == len(data)
 
 
+@pytest.mark.parametrize("max_len,expected",[
+    (5, 8), 
+    (128, 10),
+])
+def test_dataset_max_len(glm_tokenizer, max_len, expected):
+    data = [
+        {"prompt": "爱爱爱爱", "completion": "谁"}
+    ]
+    ds = GlmMapStyleDataset(data, glm_tokenizer, max_len)
+    v = ds[0]
+    # 爱爱爱爱 encode后长度为7，超过后变为5，加上completion的三个：空白符、谁、EOS，共8个token
+    assert len(v.input_ids) == expected
+
+
 arr_dtype = np.int64
 
 input_ids = np.array(
@@ -119,7 +133,6 @@ def test_dataset_collector(glm_tokenizer, inp_key, shape):
         {"prompt": "你好", "completion": "谁"},
     ]
     ds = GlmMapStyleDataset(data, glm_tokenizer)
-    print(ds)
     binp = GlmDataCollector.collate_fn(ds)
     val = binp[inp_key]
     assert tuple(val.shape) == shape

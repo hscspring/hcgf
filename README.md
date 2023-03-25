@@ -28,23 +28,49 @@ https://pytorch.org/get-started/previous-versions/
 
 ### 正常微调
 
-至少需要一张20G以上显存的卡，建议32G。
+至少需要一张16G显存的卡。
 
 ```python
 # 微调
-from hcgf.sft import GlmLora
-data_path = "/path/to/json_data/"
-model_id = "THUDM/chatglm-6b"
-device = "cuda:0"
-model = GlmLora(model_id, device=device)
-model.load_data(data_path).tune()
+import hcgf
+gl = hcgf.GlmLora("THUDM/chatglm-6b", device="cuda:0")
+gl.load_data("./data/chatgpt_finetune_faq.json").tune()
 
 # 推理
-from hcgf.sft import GlmLora
-model_id = "THUDM/chatglm-6b"
-device = "cuda:0"
-model = GlmLora(model_id, device=device)
-model.load_pretrained("/path/to/lora_pt").eval()
+import hcgf
+gl = hcgf.GlmLora("THUDM/chatglm-6b", device="cuda:0", infer_mode=True)
+gl.load_pretrained("/path/to/lora_pt").eval()
 inp = "你是谁？"
-model.chat(inp)
+gl.chat(inp)
+```
+
+### 8bit微调
+
+至少需要一张12G显存的卡。不指定device。
+
+```python
+# 微调
+import hcgf
+gl = hcgf.GlmLora("THUDM/chatglm-6b", load_in_8bit=True)
+gl.load_data("./data/chatgpt_finetune_faq.json").tune()
+
+# 推理
+gl = hcgf.GlmLora("THUDM/chatglm-6b", load_in_8bit=True, infer_mode=True)
+gl.load_pretrained("/path/to/lora_pt").eval()
+inp = "你是谁？"
+gl.chat(inp)
+```
+
+### 配置
+
+有几个影响显存的参数可以配置：`max_seq_len`，`batch_size`，`accumulate_steps`。
+
+
+```python
+(
+gl
+.load_data("./data/chatgpt_finetune_faq.json", max_seq_len=128)
+.tune(batch_size=1, accumulate_steps=1)
+)
+
 ```

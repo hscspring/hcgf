@@ -21,6 +21,7 @@ class Trainer:
         accumulate_steps: int,
         out_dir: str,
         device: Optional[str],
+        print_every: int,
     ):
         self.lr = lr
         self.num_epochs = num_epochs
@@ -28,6 +29,7 @@ class Trainer:
         self.accumulate_steps = accumulate_steps
         self.out_dir = out_dir
         self.device = device
+        self.print_every = max(print_every, 1)
 
     def train(
         self,
@@ -36,9 +38,7 @@ class Trainer:
         dev_dataloader: DataLoader
     ) -> None:
         ckpt_path = os.path.join(self.out_dir, "ckpt")
-        save_path = os.path.join(self.out_dir, "save")
-        pnlp.check_dir(self.out_dir, ckpt_path, save_path)
-        print_every = 10
+        pnlp.check_dir(self.out_dir, ckpt_path)
         start_time = time.perf_counter()
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.lr)
@@ -101,7 +101,7 @@ class Trainer:
                     lr_scheduler.step()
                     optimizer.zero_grad()
 
-                if step % print_every == 0:
+                if step % self.print_every == 0:
                     msg = f"Step: {step}, "
                     msg += f"Loss: {train_loss/step:.4f}, "
                     msg += f"LearningRate: {lr_scheduler.get_last_lr()[0]:.6f} "
@@ -113,7 +113,7 @@ class Trainer:
                     if val_loss < val_best_loss:
                         val_best_loss = val_loss
                         last_improve = total_step
-                        out_file_name = f"lora-ckpt-{total_step}.pt"
+                        out_file_name = f"lora-ckpt-best-{total_step}.pt"
                         out_file_path = os.path.join(ckpt_path, out_file_name)
                         torch.save(get_lora_state_dict(model), out_file_path)
 
@@ -145,7 +145,7 @@ class Trainer:
             if flag:
                 break
 
-        out_file_name = f"lora-ckpt-{total_step}.pt"
+        out_file_name = f"lora-ckpt-last-{total_step}.pt"
         out_file_path = os.path.join(ckpt_path, out_file_name)
         torch.save(get_lora_state_dict(model), out_file_path)
 
