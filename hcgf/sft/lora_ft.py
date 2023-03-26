@@ -74,8 +74,8 @@ class GlmLora:
             dtype = torch.float16
         else:
             dtype = torch.float32
+            model.lm_head = CastOutputToFloat(model.lm_head)
         model = self.__cast_to(model, dtype)
-        model.lm_head = CastOutputToFloat(model.lm_head)
         return model
 
     def _load_glm(self, model_id: str) -> PreTrainedModel:
