@@ -88,6 +88,7 @@ class Trainer:
                 else:
                     dtype = torch.bfloat16
                 # mix precision
+                model.train()
                 with torch.cuda.amp.autocast(dtype=dtype):
                     output = model(**batch)
                 loss_b = output.loss.detach().float()
@@ -125,8 +126,6 @@ class Trainer:
                     msg += "= " * 30
                     print(msg)
 
-                    model.train()
-
                 if total_step - last_improve > early_stop_steps:
                     print("Early stop for no improvements...")
                     flag = True
@@ -140,7 +139,6 @@ class Trainer:
             msg += f"\tEpoch TrainLoss: {train_loss/batch_num:.4f}  \n"
             msg += f"\tEpoch ValidLoss: {val_loss:.4f}  "
             print(msg)
-            model.train()
 
             if flag:
                 break
