@@ -40,7 +40,7 @@ class GlmLora:
             self.device = None
             model = self._load_8bit_glm(model_id)
         else:
-            self.device = device
+            self.device = device or "cuda"
             model = self._load_glm(model_id)
         self.tokenizer = ChatGLMTokenizer.from_pretrained(model_id)
         self.config = LoraConfig(
