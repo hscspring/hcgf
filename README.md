@@ -60,6 +60,14 @@ gl.load_pretrained("/path/to/lora_pt").eval()
 gl.chat("你是谁?")
 ```
 
+### 继续微调
+
+```python
+import hcgf
+gl = hcgf.GlmLora("as_you_need_like_above")
+gl.load_pretrained("/path/to/lora_pt").load_data("/path/to/new_data").tune()
+```
+
 ### 配置
 
 有几个影响显存的参数可以配置：`max_seq_len`，`batch_size`。
