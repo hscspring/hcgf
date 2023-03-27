@@ -1,6 +1,3 @@
-
-## 使用
-
 先clone仓库或pip安装：
 
 ```bash
@@ -18,13 +15,15 @@ pip install -r requirements.txt
 https://pytorch.org/get-started/previous-versions/
 
 
-### 准备数据
+## 准备数据
 
 每一行一个json，必须包含`prompt`和`completion`两个字段。示例如下：
 
 ```bash
 {"prompt": "问题：你是谁？\n", "completion": "不告诉你。"},
 ```
+
+## 微调
 
 ### 正常微调
 
@@ -63,14 +62,34 @@ gl.chat("你是谁?")
 
 ### 配置
 
-有几个影响显存的参数可以配置：`max_seq_len`，`batch_size`，`accumulate_steps`。
+有几个影响显存的参数可以配置：`max_seq_len`，`batch_size`。
 
 
 ```python
 (
 gl
 .load_data("./data/chatgpt_finetune_faq.json", max_seq_len=128)
-.tune(batch_size=1, accumulate_steps=1)
+.tune(batch_size=1)
 )
 
 ```
+
+不同配置 `8bit` 资源占用：
+
+| max_seq_len | batch_size | memory |
+| ----------- | ---------- | ------ |
+| `64`        | 1          | 11G    |
+| `128`       | 1          | 12G    |
+| `512`       | 1          | 22G    |
+| 128         | `2`        | 15G    |
+| 128         | `4`        | 21G    |
+
+不同配置正常资源占用：
+
+| max_seq_len | batch_size | memory |
+| ----------- | ---------- | ------ |
+| `64`        | 1          | 15G    |
+| `128`       | 1          | 16G    |
+| `512`       | 1          | 30G    |
+| 128         | `2`        | 19G    |
+| 128         | `4`        | 25G    |
