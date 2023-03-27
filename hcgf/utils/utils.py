@@ -21,7 +21,8 @@ def print_trainable_parameters(model: nn.Module) -> None:
 
 def print_layer_info(model: nn.Module) -> None:
     for key, val in model.named_parameters():
-        print(key, val.dtype, val.device)
+        msg = "\t".join(map(str, (val.dtype, val.device, val.numel(), key)))
+        print(msg)
 
 
 def get_lora_state_dict(

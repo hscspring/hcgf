@@ -29,10 +29,12 @@ class GlmLora:
         lora_dropout: float = 0.1,
         load_in_8bit: bool = False,
         infer_mode: bool = False,
+        cast_small_parameters: bool = True,
     ):
         print(f"Loading tokenizer and model of {model_id}")
         self.infer_mode = infer_mode
         self.load_in_8bit = load_in_8bit
+        self.cast_small_parameters = cast_small_parameters
         if self.load_in_8bit:
             import bitsandbytes as bnb
             self.device = None
@@ -61,21 +63,22 @@ class GlmLora:
     def __cast_to(self, model: nn.Module, dtype: torch.Type) -> nn.Module:
         for param in model.parameters():
             param.requires_grad = False
-            if param.ndim == 1:
-                # cast the small parameters (e.g. layernorm, bias) to fp32 for
-                # stability
+            if param.ndim == 1 and param.dtype != dtype:
+                # cast the small parameters (e.g. layernorm, bias) to fp32 for stability
                 param.data = param.data.to(dtype)
         return model
 
     def _load_8bit_glm(self, model_id: str) -> PreTrainedModel:
         model = ChatGLMForConditionalGeneration.from_pretrained(
             model_id, load_in_8bit=True, device_map="auto")
-        if self.infer_mode:
-            dtype = torch.float16
-        else:
-            dtype = torch.float32
-            model.lm_head = CastOutputToFloat(model.lm_head)
-        model = self.__cast_to(model, dtype)
+        if self.cast_small_parameters:
+            if self.infer_mode:
+                dtype = torch.float16
+                model = self.__cast_to(model, dtype)
+            else:
+                dtype = torch.float32
+                model = self.__cast_to(model, dtype)
+                model.lm_head = CastOutputToFloat(model.lm_head)
         return model
 
     def _load_glm(self, model_id: str) -> PreTrainedModel:
@@ -101,7 +104,7 @@ class GlmLora:
         lr: float = 2e-4,
         num_epochs: int = 10,
         warmup_steps: Optional[int] = None,
-        accumulate_steps: Optional[int] = 8,
+        accumulate_steps: Optional[int] = 32,
         out_dir: str = "./output/",
         print_every: int = 10,
     ):
