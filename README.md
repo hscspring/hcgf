@@ -20,7 +20,7 @@ https://pytorch.org/get-started/previous-versions/
 每一行一个json，必须包含`prompt`和`completion`两个字段。示例如下：
 
 ```bash
-{"prompt": "问题：你是谁？\n", "completion": "不告诉你。"},
+{"prompt": "问题：你是谁？\n", "completion": "不告诉你。"}
 ```
 
 ## 微调
