@@ -1140,7 +1140,7 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
             outputs = outputs.tolist()[0][len(input_ids["input_ids"][0]):]
             response = tokenizer.decode(outputs)
             response = self.process_response(response)
-            if "\n\n" in response or " 问题" in response or "问题：" in response:
+            if " 问题" in response or "问题：" in response:
                 break
             new_history = history + [(query, response)]
             yield response, new_history
