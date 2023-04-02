@@ -2,7 +2,7 @@ import pytest
 
 import os
 
-from hcgf.dataloader.data_model import DataItem
+from hcgf.data_model import DataItem
 from hcgf.dataloader.data_loader import GlmDataLoader
 from hcgf.sft.chatglm.tokenization_chatglm import ChatGLMTokenizer
 

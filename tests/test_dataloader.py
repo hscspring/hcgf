@@ -5,7 +5,7 @@ import numpy as np
 import pnlp
 
 from hcgf.dataloader.dataset import GlmMapStyleDataset
-from hcgf.dataloader.data_model import DataItem
+from hcgf.data_model import DataItem
 from hcgf.dataloader.data_collector import GlmDataCollector
 
 

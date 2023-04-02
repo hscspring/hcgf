@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="hcgf",
-    version="0.0.4",
+    version="0.0.5",
     author="Yam",
     author_email="haoshaochun@gmail.com",
     description="Humanable ChatGPT/GLM Fine-tuning.",

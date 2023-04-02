@@ -149,13 +149,7 @@ class GlmLora:
         else:
             self.model.eval()
 
-    def chat(self, inp: str, history: List[str] = None, max_len: int = 128):
+    def chat(self, inp: str, history: List[str] = None, max_len: int = 512):
         if not history:
             history = []
-        res = []
-        for response, history in self.model.stream_chat(
-                self.tokenizer, inp, history, max_len):
-            query, response = history[-1]
-            res.append(response)
-        answer = "".join(res)
-        return answer, history
+        return self.model.chat(self.tokenizer, inp, history, max_len)
