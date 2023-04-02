@@ -15,15 +15,17 @@ pip install -r requirements.txt
 https://pytorch.org/get-started/previous-versions/
 
 
-## 准备数据
+
+## 微调
+
+
+### 准备数据
 
 每一行一个json，必须包含`prompt`和`completion`两个字段。示例如下：
 
 ```bash
 {"prompt": "问题：你是谁？\n", "completion": "不告诉你。"}
 ```
-
-## 微调
 
 ### 正常微调
 
@@ -101,3 +103,18 @@ gl
 | `512`       | 1          | 30G    |
 | 128         | `2`        | 19G    |
 | 128         | `4`        | 25G    |
+
+
+## RM
+
+使用小模型（如BERT等）训练。
+
+### 训练
+
+### 准备数据
+
+需要pair对数据，计算logits过程和普通预训练模型一样（一个Batch多个pair对）；计算loss时属于同一个pair对的logits放一块算。
+
+推理时直接用logits就行。
+
+### 推理

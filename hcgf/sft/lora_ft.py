@@ -157,5 +157,5 @@ class GlmLora:
                 self.tokenizer, inp, history, max_len):
             query, response = history[-1]
             res.append(response)
-        answer = "".join(response)
+        answer = "".join(res)
         return answer, history

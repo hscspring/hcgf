@@ -1,7 +1,7 @@
 from typing import List, Dict
 from transformers.tokenization_utils import PreTrainedTokenizer
 
-from .data_model import DataItem
+from ..data_model import DataItem
 
 
 class GlmMapStyleDataset:

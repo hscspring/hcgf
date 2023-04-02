@@ -1,5 +1,6 @@
 benchmark_data.json
 output/
+.DS_Store
 data/
 memo.txt
 test_output/

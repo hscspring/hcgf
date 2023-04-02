@@ -2,7 +2,7 @@ from typing import List
 import torch
 
 
-from .data_model import DataItem, GlmBatchInput
+from ..data_model import DataItem, GlmBatchInput
 
 
 class GlmDataCollector:
