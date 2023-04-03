@@ -1,7 +1,11 @@
-from typing import Dict
+from typing import Dict, List
 
 import torch
 import torch.nn as nn
+from transformers.tokenization_utils import PreTrainedTokenizer
+
+
+from ..data_model import Tensor
 
 
 def print_trainable_parameters(model: nn.Module) -> None:
@@ -47,3 +51,14 @@ def get_lora_state_dict(
         return to_return
     else:
         raise NotImplementedError
+
+
+def create_token_tensor_list(tokenizer: PreTrainedTokenizer, tokens: List[str]
+    ) -> List[Tensor["L", torch.LongTensor]]:
+    tensor_list = []
+    for token in tokens:
+        tids = tokenizer(
+            token, add_special_tokens=False, return_tensors="pt"
+        )["input_ids"].squeeze()[1:]
+        tensor_list.append(tids)
+    return tensor_list

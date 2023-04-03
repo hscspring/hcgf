@@ -1,16 +1,45 @@
-from typing import Optional, List
+from typing import Optional, List, Tuple
+import copy
 
 import torch
 import torch.nn as nn
 from transformers.modeling_utils import PreTrainedModel
+from transformers.generation.utils import LogitsProcessorList, StoppingCriteriaList, StoppingCriteria
 from peft import get_peft_model, LoraConfig, TaskType
 
-from ..utils import print_trainable_parameters
+from ..utils import print_trainable_parameters, create_token_tensor_list
 from ..dataloader import GlmDataLoader
+from ..data_model import Tensor
 from ..trainer import Trainer
 
 
-from .chatglm import ChatGLMForConditionalGeneration, ChatGLMTokenizer
+from .chatglm import ChatGLMForConditionalGeneration, ChatGLMTokenizer, InvalidScoreLogitsProcessor
+
+
+class CustomStoppingCriteria(StoppingCriteria):
+
+    def __init__(
+        self, 
+        stop_tensor_list: List[Tensor["L", torch.LongTensor]], 
+        device: torch.device, 
+        encounters: int = 1
+    ):
+        super().__init__()
+        self.stops = [stop.to(device) for stop in stop_tensor_list]
+        self.encounters = encounters
+
+    def __call__(
+        self, 
+        input_ids: Tensor["B,L", torch.LongTensor], 
+        scores: torch.FloatTensor
+    ):
+        count = 0
+        for stop in self.stops:
+            if torch.all((stop == input_ids[0][-len(stop):])).item():
+                count += 1
+            if count >= self.encounters:
+                return True
+        return False
 
 
 class CastOutputToFloat(nn.Sequential):
@@ -59,6 +88,9 @@ class GlmLora:
         print("Processing peft model")
         self.model = get_peft_model(model, self.config)
         print_trainable_parameters(self.model)
+
+        self.stop_tokens = ["问题："]
+        self.builtin_stop_tensor_list = self.init_stop_tensor_list()
 
     def __cast_to(self, model: nn.Module, dtype: torch.Type) -> nn.Module:
         for param in model.parameters():
@@ -148,8 +180,83 @@ class GlmLora:
             self.model.to(self.device).eval()
         else:
             self.model.eval()
+    
+    @torch.no_grad()
+    def stream_chat(
+        self, 
+        query: str, 
+        history: List[Tuple[str, str]] = None, 
+        max_length: int = 2048,
+        do_sample=True, 
+        top_p=0.7, 
+        temperature=0.95, 
+        logits_processor=None, 
+        stopping_criteria=None,
+        **kwargs
+    ):
+        "From ChatGLM Model"
+        if logits_processor is None:
+            logits_processor = LogitsProcessorList()
+        logits_processor.append(InvalidScoreLogitsProcessor())
+        if stopping_criteria is None:
+            stopping_criteria = StoppingCriteriaList()
+        gen_kwargs = {
+            "max_length": max_length, 
+            "do_sample": do_sample, 
+            "top_p": top_p,
+            "temperature": temperature, 
+            "logits_processor": logits_processor,
+            "stopping_criteria": stopping_criteria,
+            **kwargs
+        }
+        if not history:
+            prompt = query
+        else:
+            prompt = ""
+            for i, (old_query, response) in enumerate(history):
+                prompt += "[Round {}]\n 问：{}\n 答：{}\n".format(i, old_query, response)
+            prompt += "[Round {}]\n 问：{}\n 答：".format(len(history), query)
+        inputs = self.tokenizer([prompt], return_tensors="pt")
+        inputs = inputs.to(self.model.device)
+        for outputs in self.model.stream_generate(
+            inputs["input_ids"], **gen_kwargs
+        ):
+            outputs = outputs.tolist()[0][len(inputs["input_ids"][0]):]
+            response = self.tokenizer.decode(outputs)
+            response = self.model.process_response(response)
+            new_history = history + [(query, response)]
+            yield response, new_history
 
-    def chat(self, inp: str, history: List[str] = None, max_len: int = 512):
+    def chat(
+        self, 
+        inp: str, 
+        history: List[str] = None, 
+        max_len: int = 512, 
+        stop: List[str] = []
+    ):
         if not history:
             history = []
-        return self.model.chat(self.tokenizer, inp, history, max_len)
+        
+        if stop:
+            stop_tokens = [v for v in stop if v not in self.stop_tokens]
+            custom_stop_tensor_list = create_token_tensor_list(self.tokenizer, stop_tokens)
+            stop_tensor_list = self.builtin_stop_tensor_list + custom_stop_tensor_list
+        else:
+            stop_tensor_list = self.builtin_stop_tensor_list
+
+        custom_stop_list = [CustomStoppingCriteria(stop_tensor_list, self.model.device)]
+        
+        for response, history in self.stream_chat(
+            inp, history, max_len,
+            stopping_criteria=StoppingCriteriaList(custom_stop_list),
+        ):
+            ...
+        return response, history
+    
+    def init_stop_tensor_list(self) -> List[Tensor["L", torch.LongTensor]]:
+        init_tensor_list = [
+            torch.LongTensor([20002]),  # eos
+            torch.LongTensor([150005]), # eop
+        ]
+        new_add = create_token_tensor_list(self.tokenizer, self.stop_tokens)
+        return init_tensor_list + new_add

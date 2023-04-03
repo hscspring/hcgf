@@ -34,6 +34,7 @@ class GlmMapStyleDataset:
             max_length=self.max_seq_len,
             truncation=True,
             add_special_tokens=False)
+        # ChatGLM use eop_token_id as eos_token_id.....
         input_ids = src_ids + tgt_ids + [self.tokenizer.eos_token_id]
         cxt_len = len(src_ids)
         return DataItem(input_ids, cxt_len)

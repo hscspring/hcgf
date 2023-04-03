@@ -1,9 +1,17 @@
 from dataclasses import dataclass, asdict
 
-from typing import NewType, Tuple, TypedDict, Optional, List
+from typing import NewType, Tuple, TypedDict, Optional, List, TypeVar, Generic
 from typing_extensions import Annotated
 
 import torch
+
+
+
+Shape = TypeVar("Shape")
+DType = TypeVar("DType", torch.IntType, torch.FloatType)
+
+class Tensor(torch.Tensor, Generic[Shape, DType]):
+    ...
 
 Batch = NewType("Batch", int)
 SeqLen = NewType("SeqLen", int)

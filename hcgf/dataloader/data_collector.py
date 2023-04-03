@@ -95,9 +95,10 @@ class GlmDataCollector:
             )
 
             padding_len = longest_seq_len - seq_len
-            _labels = ([-100] * (cxt_len - 1) +
-                       ids[(cxt_len - 1):] + [-100] * padding_len)
+            _labels = [-100] * (cxt_len - 1) + ids[(cxt_len - 1):] + [-100] * padding_len
             # 20002 == eos_token_id
+            # 20003 == pad_token_id
+            # 150005 == eop_token_id
             _ids = ids + [20002] * padding_len
 
             if input_dtype == torch.int32:
