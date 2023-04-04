@@ -57,11 +57,9 @@ gl.load_data("/path/to/new_data.json").tune()
 
 ### 8bit微调
 
-至少需要一张12G显存的卡。不指定device。
+至少需要一张12G显存的卡。不指定device。只需要初始化时改一下即可，其他操作和上面正常微调一样。
 
 需要安装依赖: `bitsandbytes`
-
-只需要初始化时改一下即可，其他操作和上面正常微调一样。
 
 ```python
 gl = hcgf.GlmLora("THUDM/chatglm-6b", load_in_8bit=True)
