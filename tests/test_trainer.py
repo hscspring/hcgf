@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+import os
+import shutil
 import pytest
 
 import torch
@@ -53,13 +55,16 @@ model = Model()
 @pytest.mark.parametrize("warmup_steps", [None, 10])
 @pytest.mark.parametrize("accumulate_steps", [1, 8])
 def test_trainer(lr, num_epochs, warmup_steps, accumulate_steps):
+    out_path = "./test_output/"
     trainer = Trainer(
         lr,
         num_epochs,
         warmup_steps,
         accumulate_steps,
-        "test_output/",
+        out_path,
         "cpu",
         10,
     )
     trainer.train(model, train_loader, train_loader)
+    if os.path.exists(out_path):
+        shutil.rmtree(out_path)
