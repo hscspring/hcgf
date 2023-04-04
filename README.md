@@ -52,6 +52,8 @@ gl.chat("你是谁？")
 gl.tune()
 # 如果有新的数据集，参考上面的写法，先加载数据
 gl.load_data("/path/to/new_data.json").tune()
+# 如果在原来的基础上用新数据继续微调，先加载之前的pt文件，再加载数据微调
+gl.load_pretrained("/path/to/lora_pt").load_data("/path/to/new_data.json").tune()
 ```
 
 
@@ -70,7 +72,7 @@ gl = hcgf.GlmLora("THUDM/chatglm-6b", load_in_8bit=True)
 先加载之前的`pt`文件，然后加载数据微调。
 
 ```python
-gl.load_pretrained("/path/to/lora_pt").load_data("/path/to/new_data").tune()
+gl.load_pretrained("/path/to/lora_pt").load_data("/path/to/new_data.json").tune()
 ```
 
 ### 参数说明
