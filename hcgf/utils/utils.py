@@ -18,14 +18,14 @@ def print_trainable_parameters(model: nn.Module) -> None:
         all_param += param.numel()
         if param.requires_grad:
             trainable_params += param.numel()
-    msg = f"trainable params: {trainable_params} || all params: {all_param} "
-    msg += f"\ntrainable%: {100 * trainable_params / all_param}"
+    msg = f"trainable params: {trainable_params} || all params: {all_param} || "
+    msg += f"trainable%: {100 * trainable_params / all_param}"
     print(msg)
 
 
 def print_layer_info(model: nn.Module) -> None:
     for key, val in model.named_parameters():
-        msg = "\t".join(map(str, (val.dtype, val.device, val.numel(), key)))
+        msg = "\t".join(map(str, (val.dtype, val.device, val.requires_grad, key)))
         print(msg)
 
 

@@ -4,7 +4,11 @@ import copy
 import torch
 import torch.nn as nn
 from transformers.modeling_utils import PreTrainedModel
-from transformers.generation.utils import LogitsProcessorList, StoppingCriteriaList, StoppingCriteria
+from transformers.generation.utils import (
+    LogitsProcessorList, 
+    StoppingCriteriaList, 
+    StoppingCriteria
+)
 from peft import get_peft_model, LoraConfig, TaskType
 
 from ..utils import print_trainable_parameters, create_token_tensor_list
@@ -13,7 +17,11 @@ from ..data_model import Tensor
 from ..trainer import Trainer
 
 
-from .chatglm import ChatGLMForConditionalGeneration, ChatGLMTokenizer, InvalidScoreLogitsProcessor
+from .chatglm import (
+    ChatGLMForConditionalGeneration, 
+    ChatGLMTokenizer, 
+    InvalidScoreLogitsProcessor
+)
 
 
 class CustomStoppingCriteria(StoppingCriteria):
@@ -57,13 +65,9 @@ class GlmLora:
         lora_alpha: int = 32,
         lora_dropout: float = 0.1,
         load_in_8bit: bool = False,
-        infer_mode: bool = False,
-        cast_small_parameters: bool = True,
     ):
         print(f"Loading tokenizer and model of {model_id}")
-        self.infer_mode = infer_mode
         self.load_in_8bit = load_in_8bit
-        self.cast_small_parameters = cast_small_parameters
         if self.load_in_8bit:
             import bitsandbytes as bnb
             self.device = None
@@ -76,7 +80,7 @@ class GlmLora:
             # peft config
             peft_type="LORA",
             task_type=TaskType.CAUSAL_LM,
-            inference_mode=infer_mode,
+            inference_mode=False,
             # lora config
             target_modules=["query_key_value"],
             r=lora_r,
@@ -92,25 +96,21 @@ class GlmLora:
         self.stop_tokens = ["问题："]
         self.builtin_stop_tensor_list = self.init_stop_tensor_list()
 
-    def __cast_to(self, model: nn.Module, dtype: torch.Type) -> nn.Module:
-        for param in model.parameters():
-            param.requires_grad = False
+    def __cast_small_to(self, dtype: torch.Type):
+        for name, param in self.model.named_parameters():
             if param.ndim == 1 and param.dtype != dtype:
-                # cast the small parameters (e.g. layernorm, bias) to fp32 for stability
                 param.data = param.data.to(dtype)
-        return model
+    
+    def __cast_lora_to(self, dtype: torch.Type):
+        for name, param in self.model.named_parameters():
+            if "lora_" in name:
+                param.data = param.data.to(dtype)
 
     def _load_8bit_glm(self, model_id: str) -> PreTrainedModel:
         model = ChatGLMForConditionalGeneration.from_pretrained(
             model_id, load_in_8bit=True, device_map="auto")
-        if self.cast_small_parameters:
-            if self.infer_mode:
-                dtype = torch.float16
-                model = self.__cast_to(model, dtype)
-            else:
-                dtype = torch.float32
-                model = self.__cast_to(model, dtype)
-                model.lm_head = CastOutputToFloat(model.lm_head)
+        for param in model.parameters():
+            param.requires_grad = False
         return model
 
     def _load_glm(self, model_id: str) -> PreTrainedModel:
@@ -126,7 +126,7 @@ class GlmLora:
         return self
 
     def load_data(self, data_path: str, max_seq_len: int = 512):
-        print("Loading data")
+        print(f"Loading data with max_seq_len: {max_seq_len}")
         self.dataloader = GlmDataLoader(data_path, self.tokenizer, max_seq_len)
         return self
 
@@ -146,6 +146,11 @@ class GlmLora:
         if `warmup_steps` is None, will use one epoch to warmup by default
         if `accumulate_steps` is None, will use 1 as default
         """
+        print("Switch to training mode...")
+        if self.load_in_8bit:
+            self.__cast_small_to(torch.float32)
+        self.model.lm_head = CastOutputToFloat(self.model.lm_head)
+        self.__cast_lora_to(torch.float32)
         # turn on when infer
         self.model.config.use_cache = False
         if self.device is not None:
@@ -166,15 +171,14 @@ class GlmLora:
         trainer.train(self.model, train_dl, dev_dl)
 
     def eval(self, quant_bit: Optional[int] = None):
+        print("Switch to inference mode...")
+        self.model.half()
+        if self.load_in_8bit:
+            self.__cast_lora_to(torch.float32)
+        self.model.base_model.peft_config.inference_mode = True
         self.model.config.use_cache = True
-
-        # 8bit do not use half, just keep its type
-        if not self.load_in_8bit:
-            self.model.half()
-
         if quant_bit is not None:
             self.model.quantize(quant_bit)
-
         # 8bit do not use device, device is None
         if self.device is not None:
             self.model.to(self.device).eval()
@@ -230,7 +234,7 @@ class GlmLora:
     def chat(
         self, 
         inp: str, 
-        history: List[str] = None, 
+        history: List[Tuple[str, str]] = None, 
         max_len: int = 512, 
         stop: List[str] = []
     ):

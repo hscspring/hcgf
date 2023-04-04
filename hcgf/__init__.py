@@ -3,4 +3,4 @@ from .dataloader import GlmMapStyleDataset, GlmDataCollector, GlmDataLoader
 from .trainer import Trainer
 
 
-__version__ = "0.0.6"
+__version__ = "0.0.7"

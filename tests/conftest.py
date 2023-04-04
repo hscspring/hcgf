@@ -27,6 +27,17 @@ def glm_dataloader(glm_data_file):
 
 
 @pytest.fixture
+def glm_tune_param():
+    params = {
+        "lr": 2e-4,
+        "num_epochs": 1, 
+        "warmup_steps": 0, 
+        "accumulate_steps": 1, 
+        "print_every": 2, 
+    }
+    return params
+
+@pytest.fixture
 def mocked_dataset():
     """
     {"prompt": "你好你好你好", "completion": "是谁"},
