@@ -95,7 +95,7 @@ chat(
     inp: str, 
     history: List[Tuple[str, str]] = None,  # (问，答)Pair对
     max_len: int = 512,                     # 上下文的最大长度，超过就不生成了
-    stop: List[str] = []                    # 停止文本，可以是标点、特定词或句子等
+    stop: List[str] = []                    # 停止文本，可以是标点、特定词或句子等，输出不包含停止文本
 )
 
 ```
