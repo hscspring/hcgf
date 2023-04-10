@@ -20,7 +20,7 @@ https://pytorch.org/get-started/previous-versions/
 
 ### 准备数据
 
-每一行一个dict的json文件，必须包含`prompt`和`completion`两个字段。示例如下：
+每一行一个dict的`.json`文件，必须包含`prompt`和`completion`两个字段。示例如下：
 
 ```bash
 {"prompt": "你是谁？\n", "completion": "不告诉你。"}
@@ -97,7 +97,7 @@ chat(
     inp: str, 
     history: List[Tuple[str, str]] = None,  # (问，答)Pair对
     max_len: int = 512,                     # 上下文的最大长度，超过就不生成了
-    temperature: float = 0.95,              # 越小越确定，越大越随机
+    temperature: float = 0.95,              # 越小越确定，越大越随机，比如你微调后可以把它改成0.2
     top_p: float = 0.7,                     # 同上，两者不要同时调
     stop: List[str] = []                    # 停止文本，可以是标点、特定词或句子等，输出不包含停止文本
 )
