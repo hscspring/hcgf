@@ -59,6 +59,8 @@ class ChatGLMConfig(PretrainedConfig):
             use_cache=False,
             bos_token_id=150004,
             eos_token_id=150005,
+            mask_token_id=150000,
+            gmask_token_id=150001,
             pad_token_id=0,
             max_sequence_length=2048,
             inner_hidden_size=16384,
@@ -79,6 +81,8 @@ class ChatGLMConfig(PretrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
+        self.mask_token_id = mask_token_id
+        self.gmask_token_id = gmask_token_id
         self.position_encoding_2d = position_encoding_2d
         self.quantization_bit = quantization_bit
         self.pre_seq_len = pre_seq_len

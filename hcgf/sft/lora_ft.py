@@ -73,7 +73,7 @@ class GlmLora:
             self.device = None
             model = self._load_8bit_glm(model_id)
         else:
-            self.device = device or "cuda"
+            self.device = device or "cuda:0"
             model = self._load_glm(model_id)
         self.tokenizer = ChatGLMTokenizer.from_pretrained(model_id)
         self.config = LoraConfig(
@@ -221,7 +221,8 @@ class GlmLora:
                 prompt += "[Round {}]\n 问：{}\n 答：{}\n".format(i, old_query, response)
             prompt += "[Round {}]\n 问：{}\n 答：".format(len(history), query)
         inputs = self.tokenizer([prompt], return_tensors="pt")
-        inputs = inputs.to(self.model.device)
+        inputs = inputs.to(self.curr_device)
+
         for outputs in self.model.stream_generate(
             inputs["input_ids"], **gen_kwargs
         ):
@@ -236,6 +237,8 @@ class GlmLora:
         inp: str, 
         history: List[Tuple[str, str]] = None, 
         max_len: int = 512, 
+        temperature: float = 0.95,
+        top_p: float = 0.7,
         stop: List[str] = []
     ):
         if not history:
@@ -248,14 +251,21 @@ class GlmLora:
         else:
             stop_tensor_list = self.builtin_stop_tensor_list
 
-        custom_stop_list = [CustomStoppingCriteria(stop_tensor_list, self.model.device)]
+        custom_stop_list = [CustomStoppingCriteria(stop_tensor_list, self.curr_device)]
         
         for response, history in self.stream_chat(
             inp, history, max_len,
+            top_p=top_p, temperature=temperature,
             stopping_criteria=StoppingCriteriaList(custom_stop_list),
         ):
             ...
         return response, history
+    
+    @property
+    def curr_device(self) -> torch.device:
+        if self.device is None:
+            return self.model.device
+        return self.device
     
     def init_stop_tensor_list(self) -> List[Tensor["L", torch.LongTensor]]:
         init_tensor_list = [

@@ -55,7 +55,7 @@ class InvalidScoreLogitsProcessor(LogitsProcessor):
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if torch.isnan(scores).any() or torch.isinf(scores).any():
             scores.zero_()
-            scores[..., 20005] = 5e4
+            scores[..., 5] = 5e4
         return scores
 
 
@@ -280,10 +280,8 @@ def attention_fn(
     # [sk, b, np, hn] -> [sk, b * np, hn]
     key_layer = key_layer.view(output_size[3], output_size[0] * output_size[1], -1)
 
-    matmul_result = torch.empty(
-        output_size[0] * output_size[1],
-        output_size[2],
-        output_size[3],
+    matmul_result = torch.zeros(
+        1, 1, 1,
         dtype=query_layer.dtype,
         device=query_layer.device,
     )
@@ -680,7 +678,7 @@ class ChatGLMPreTrainedModel(PreTrainedModel):
         batch_size, seq_length = input_ids.shape
         context_lengths = [seq.tolist().index(self.config.bos_token_id) for seq in input_ids]
         if self.position_encoding_2d:
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=device).expand(batch_size, seq_length)
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=device).unsqueeze(0).repeat(batch_size, 1)
             for i, context_length in enumerate(context_lengths):
                 position_ids[i, context_length:] = mask_positions[i]
             block_position_ids = [torch.cat((
@@ -690,7 +688,7 @@ class ChatGLMPreTrainedModel(PreTrainedModel):
             block_position_ids = torch.stack(block_position_ids, dim=0)
             position_ids = torch.stack((position_ids, block_position_ids), dim=1)
         else:
-            position_ids = torch.arange(seq_length, dtype=torch.long, device=device).expand(batch_size, seq_length)
+            position_ids = torch.arange(seq_length, dtype=torch.long, device=device).unsqueeze(0).repeat(batch_size, 1)
             if not gmask:
                 for i, context_length in enumerate(context_lengths):
                     position_ids[context_length:] = mask_positions[i]
@@ -909,9 +907,9 @@ class ChatGLMModel(ChatGLMPreTrainedModel):
 
 
             if position_ids is None:
-                MASK, gMASK = 150000, 150001
-                mask_token = MASK if MASK in input_ids else gMASK
-                use_gmask = False if MASK in input_ids else gMASK
+                MASK, gMASK = self.config.mask_token_id, self.config.gmask_token_id
+                mask_token = gMASK if gMASK in input_ids else MASK
+                use_gmask = True if gMASK in input_ids else False
 
                 mask_positions = [seq.tolist().index(mask_token) for seq in input_ids]
                 position_ids = self.get_position_ids(
@@ -1072,9 +1070,9 @@ class ChatGLMForConditionalGeneration(ChatGLMPreTrainedModel):
             **kwargs
     ) -> dict:
         batch_size, seq_length = input_ids.shape
-        MASK, gMASK = 150000, 150001
-        mask_token = MASK if MASK in input_ids else gMASK
-        use_gmask = False if MASK in input_ids else gMASK
+        MASK, gMASK = self.config.mask_token_id, self.config.gmask_token_id
+        mask_token = gMASK if gMASK in input_ids else MASK
+        use_gmask = True if gMASK in input_ids else False
         seqs = input_ids.tolist()
         mask_positions = [seq.index(mask_token) for seq in seqs]
 

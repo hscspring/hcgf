@@ -9,17 +9,26 @@ class GlmDataCollector:
 
     """
     GLM special tokens:
-
+    
+    # old version
+    150004 <sop>  # bos
+    150005 <eop>  # eop
+    20002  </s>    # eos
+    20000  <unk>
+    20003  <pad>
     150000 [MASK]
     150001 [gMASK]
     150002 [sMASK]
 
-    20000 <unk>
-    20003 <pad>
-
-    150004 <sop>  # bos
-    20002 </s>    # eos
-    150005 <eop>  # eop
+    # new version
+    130000 [MASK]  # mask
+    130001 [gMASK] # gmask
+    130004 <sop>   # bos
+    130005 <eop>   # eop
+    2      </s>    # eos
+    3      <pad>   # pad
+    0      <unk>   # unk
+    130002 [sMASK] # smask
     """
 
     @classmethod
@@ -80,15 +89,14 @@ class GlmDataCollector:
             ids = item.input_ids
             cxt_len = item.cxt_len
 
-            MASK, gMASK = 150000, 150001
+            MASK, gMASK = 130000, 130001
             mask_token = MASK if MASK in ids else gMASK
             mask_position = ids.index(mask_token)
             use_gmask = False if MASK in ids else True
 
             _masks = cls.get_masks(longest_seq_len, cxt_len)
-            # 150004 == bos_token_id
             # equal to cxt_len - 1
-            cxt_idx = ids.index(150004)
+            cxt_idx = ids.index(130004)
             _pids = cls.get_position_ids(
                 longest_seq_len, cxt_idx, mask_position, use_gmask,
                 position_encoding_2d=True, dtype=input_dtype
@@ -96,10 +104,7 @@ class GlmDataCollector:
 
             padding_len = longest_seq_len - seq_len
             _labels = [-100] * (cxt_len - 1) + ids[(cxt_len - 1):] + [-100] * padding_len
-            # 20002 == eos_token_id
-            # 20003 == pad_token_id
-            # 150005 == eop_token_id
-            _ids = ids + [20002] * padding_len
+            _ids = ids + [2] * padding_len
 
             if input_dtype == torch.int32:
                 TensorIns = torch.IntTensor

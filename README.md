@@ -20,7 +20,7 @@ https://pytorch.org/get-started/previous-versions/
 
 ### 准备数据
 
-每一行一个json，必须包含`prompt`和`completion`两个字段。示例如下：
+每一行一个dict的json文件，必须包含`prompt`和`completion`两个字段。示例如下：
 
 ```bash
 {"prompt": "你是谁？\n", "completion": "不告诉你。"}
@@ -48,7 +48,7 @@ gl.load_data("/path/to/data.json").tune()
 # 切换到推理模式
 gl.eval()
 gl.chat("你是谁？")
-# 切换回微调模式，还是用原来的数据重新跑
+# 切换回微调模式，还是用原来的数据继续跑
 gl.tune()
 # 如果有新的数据集，参考上面的写法，先加载数据
 gl.load_data("/path/to/new_data.json").tune()
@@ -97,6 +97,8 @@ chat(
     inp: str, 
     history: List[Tuple[str, str]] = None,  # (问，答)Pair对
     max_len: int = 512,                     # 上下文的最大长度，超过就不生成了
+    temperature: float = 0.95,              # 越小越确定，越大越随机
+    top_p: float = 0.7,                     # 同上，两者不要同时调
     stop: List[str] = []                    # 停止文本，可以是标点、特定词或句子等，输出不包含停止文本
 )
 
