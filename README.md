@@ -172,7 +172,7 @@ python -m pytest -m "not slow"
 
 即将`"THUDM/chatglm-6b"`替换为`transformers` `cache`的对应snapshots下的id所在的路径。比如：
 
-```bash
+```Python
 GlmLora("/path/to/huggingface/models--THUDM--chatglm-6b/snapshots/<id>/")
 ```
 
@@ -185,7 +185,7 @@ git clone https://huggingface.co/THUDM/chatglm-6b
 
 然后切换到早期使用icetk的commit。这时候要替换的就是这个仓库的路径了。如下：
 
-```bash
+```Python
 GlmLora("/path/to/chatglm-6b/")
 ```
 
