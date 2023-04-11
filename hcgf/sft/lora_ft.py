@@ -5,8 +5,8 @@ import torch
 import torch.nn as nn
 from transformers.modeling_utils import PreTrainedModel
 from transformers.generation.utils import (
-    LogitsProcessorList, 
-    StoppingCriteriaList, 
+    LogitsProcessorList,
+    StoppingCriteriaList,
     StoppingCriteria
 )
 from peft import get_peft_model, LoraConfig, TaskType
@@ -18,8 +18,8 @@ from ..trainer import Trainer
 
 
 from .chatglm import (
-    ChatGLMForConditionalGeneration, 
-    ChatGLMTokenizer, 
+    ChatGLMForConditionalGeneration,
+    ChatGLMTokenizer,
     InvalidScoreLogitsProcessor
 )
 
@@ -27,9 +27,9 @@ from .chatglm import (
 class CustomStoppingCriteria(StoppingCriteria):
 
     def __init__(
-        self, 
-        stop_tensor_list: List[Tensor["L", torch.LongTensor]], 
-        device: torch.device, 
+        self,
+        stop_tensor_list: List[Tensor["L", torch.LongTensor]],
+        device: torch.device,
         encounters: int = 1
     ):
         super().__init__()
@@ -37,8 +37,8 @@ class CustomStoppingCriteria(StoppingCriteria):
         self.encounters = encounters
 
     def __call__(
-        self, 
-        input_ids: Tensor["B,L", torch.LongTensor], 
+        self,
+        input_ids: Tensor["B,L", torch.LongTensor],
         scores: torch.FloatTensor
     ):
         count = 0
@@ -100,7 +100,7 @@ class GlmLora:
         for name, param in self.model.named_parameters():
             if param.ndim == 1 and param.dtype != dtype:
                 param.data = param.data.to(dtype)
-    
+
     def __cast_lora_to(self, dtype: torch.Type):
         for name, param in self.model.named_parameters():
             if "lora_" in name:
@@ -184,17 +184,17 @@ class GlmLora:
             self.model.to(self.device).eval()
         else:
             self.model.eval()
-    
+
     @torch.no_grad()
     def stream_chat(
-        self, 
-        query: str, 
-        history: List[Tuple[str, str]] = None, 
+        self,
+        query: str,
+        history: List[Tuple[str, str]] = None,
         max_length: int = 2048,
-        do_sample=True, 
-        top_p=0.7, 
-        temperature=0.95, 
-        logits_processor=None, 
+        do_sample=True,
+        top_p=0.7,
+        temperature=0.95,
+        logits_processor=None,
         stopping_criteria=None,
         **kwargs
     ):
@@ -205,10 +205,10 @@ class GlmLora:
         if stopping_criteria is None:
             stopping_criteria = StoppingCriteriaList()
         gen_kwargs = {
-            "max_length": max_length, 
-            "do_sample": do_sample, 
+            "max_length": max_length,
+            "do_sample": do_sample,
             "top_p": top_p,
-            "temperature": temperature, 
+            "temperature": temperature,
             "logits_processor": logits_processor,
             "stopping_criteria": stopping_criteria,
             **kwargs
@@ -218,7 +218,8 @@ class GlmLora:
         else:
             prompt = ""
             for i, (old_query, response) in enumerate(history):
-                prompt += "[Round {}]\n 问：{}\n 答：{}\n".format(i, old_query, response)
+                prompt += "[Round {}]\n 问：{}\n 答：{}\n".format(
+                    i, old_query, response)
             prompt += "[Round {}]\n 问：{}\n 答：".format(len(history), query)
         inputs = self.tokenizer([prompt], return_tensors="pt")
         inputs = inputs.to(self.curr_device)
@@ -233,26 +234,30 @@ class GlmLora:
             yield response, new_history
 
     def chat(
-        self, 
-        inp: str, 
-        history: List[Tuple[str, str]] = None, 
-        max_len: int = 512, 
+        self,
+        inp: str,
+        history: List[Tuple[str, str]] = None,
+        max_len: int = 512,
         temperature: float = 0.95,
         top_p: float = 0.7,
         stop: List[str] = []
     ):
         if not history:
             history = []
-        
+
         if stop:
             stop_tokens = [v for v in stop if v not in self.stop_tokens]
-            custom_stop_tensor_list = create_token_tensor_list(self.tokenizer, stop_tokens)
+            custom_stop_tensor_list = create_token_tensor_list(
+                self.tokenizer, stop_tokens)
             stop_tensor_list = self.builtin_stop_tensor_list + custom_stop_tensor_list
         else:
             stop_tensor_list = self.builtin_stop_tensor_list
 
-        custom_stop_list = [CustomStoppingCriteria(stop_tensor_list, self.curr_device)]
-        
+        custom_stop_list = [
+            CustomStoppingCriteria(
+                stop_tensor_list,
+                self.curr_device)]
+
         for response, history in self.stream_chat(
             inp, history, max_len,
             top_p=top_p, temperature=temperature,
@@ -260,17 +265,17 @@ class GlmLora:
         ):
             ...
         return response, history
-    
+
     @property
     def curr_device(self) -> torch.device:
         if self.device is None:
             return self.model.device
         return self.device
-    
+
     def init_stop_tensor_list(self) -> List[Tensor["L", torch.LongTensor]]:
         init_tensor_list = [
             torch.LongTensor([20002]),  # eos
-            torch.LongTensor([150005]), # eop
+            torch.LongTensor([150005]),  # eop
         ]
         new_add = create_token_tensor_list(self.tokenizer, self.stop_tokens)
         return init_tensor_list + new_add

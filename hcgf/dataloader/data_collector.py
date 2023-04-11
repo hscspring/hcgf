@@ -9,7 +9,7 @@ class GlmDataCollector:
 
     """
     GLM special tokens:
-    
+
     # old version
     150004 <sop>  # bos
     150005 <eop>  # eop
@@ -58,8 +58,9 @@ class GlmDataCollector:
         """
         position_ids = torch.arange(longest_seq_len, dtype=dtype)
         if position_encoding_2d:
-            if not use_gmask:
-                position_ids[cxt_len:] = mask_position
+            # NOTE: if position_encoding_2d, use_gmask is not used
+            # https://github.com/THUDM/ChatGLM-6B/issues/498#event-8971243132
+            position_ids[cxt_len:] = mask_position
             block_position_ids = torch.cat((
                 torch.zeros(cxt_len, dtype=dtype),
                 torch.arange(longest_seq_len - cxt_len, dtype=dtype) + 1
@@ -103,7 +104,8 @@ class GlmDataCollector:
             )
 
             padding_len = longest_seq_len - seq_len
-            _labels = [-100] * (cxt_len - 1) + ids[(cxt_len - 1):] + [-100] * padding_len
+            _labels = [-100] * (cxt_len - 1) + \
+                ids[(cxt_len - 1):] + [-100] * padding_len
             _ids = ids + [2] * padding_len
 
             if input_dtype == torch.int32:
