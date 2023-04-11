@@ -23,7 +23,7 @@ https://pytorch.org/get-started/previous-versions/
 每一行一个dict的`.json`文件，必须包含`prompt`和`completion`两个字段。示例如下：
 
 ```bash
-{"prompt": "你是谁？\n", "completion": "不告诉你。"}
+{"prompt": "你是谁？", "completion": "不告诉你。"}
 ```
 
 
@@ -164,3 +164,25 @@ python -m pytest -s -m slow
 # 测试其他的
 python -m pytest -m "not slow"
 ```
+
+
+## 版本说明
+
+如果你用的是旧版本的ChatGLM（icetk tokenizer），可以安装`hcgf==0.0.7`版本，同时，需要手动指定`model_id`参数为模型文件实际路径。
+
+即将`"THUDM/chatglm-6b"`替换为`transformers` `cache`的对应snapshots下的id。或者，建议手动clone仓库：
+
+```bash
+git lfs install
+git clone https://huggingface.co/THUDM/chatglm-6b
+```
+
+然后切换到早期使用icetk的commit。这时候要替换的就是这个仓库的路径了。
+
+
+## 更新日志
+
+- **v0.1.0** `20230412`
+  - 支持ChatGLM新版Tokenizer
+  - 使用官方调整后的MASK方式
+- **v0.0.7** `20230405`
