@@ -1,27 +1,46 @@
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict, Any
 import copy
 
 import torch
 import torch.nn as nn
+import torch.distributed as dist
+from torch.distributed.fsdp import (
+    FullyShardedDataParallel as FSDP,
+    CPUOffload
+)
+
+from transformers import AutoTokenizer, AutoModel
 from transformers.modeling_utils import PreTrainedModel
 from transformers.generation.utils import (
     LogitsProcessorList,
     StoppingCriteriaList,
     StoppingCriteria
 )
-from peft import get_peft_model, LoraConfig, TaskType
+from transformers.generation.logits_process import LogitsProcessor
 
-from ..utils import print_trainable_parameters, create_token_tensor_list
+from .lora_model import LoraModel
+from .lora_config import LoraConfigLoader
 from ..dataloader import GlmDataLoader
 from ..data_model import Tensor
 from ..trainer import Trainer
-
-
-from .chatglm import (
-    ChatGLMForConditionalGeneration,
-    ChatGLMTokenizer,
-    InvalidScoreLogitsProcessor
+from ..trainer.fsdp import (
+    setup, 
+    cleanup,
+    get_transformer_wrap_policy, 
+    get_sharding_strategy,
+    get_mp_policy, 
 )
+from ..utils import print_trainable_parameters, create_token_tensor_list, get_model_name_from
+
+
+class InvalidScoreLogitsProcessor(LogitsProcessor):
+    def __call__(
+        self, input_ids: torch.LongTensor, scores: torch.FloatTensor
+    ) -> torch.FloatTensor:
+        if torch.isnan(scores).any() or torch.isinf(scores).any():
+            scores.zero_()
+            scores[..., 5] = 5e4
+        return scores
 
 
 class CustomStoppingCriteria(StoppingCriteria):
@@ -66,35 +85,45 @@ class GlmLora:
         lora_dropout: float = 0.1,
         load_in_8bit: bool = False,
     ):
-        print(f"Loading tokenizer and model of {model_id}")
-        self.load_in_8bit = load_in_8bit
-        if self.load_in_8bit:
+        world_size = torch.cuda.device_count()
+        self.model_id = model_id
+        self.model_name = get_model_name_from(model_id)
+
+        self.load_in_8bit = False
+        self.device = None
+        
+        if load_in_8bit:
+            self.load_in_8bit = True
             import bitsandbytes as bnb
-            self.device = None
-            model = self._load_8bit_glm(model_id)
+            self.mode = "8bit"
+        elif device is not None:
+            self.device = device
+            self.mode = "single_gpu"
+        elif device is None and world_size > 1:
+            self.mode = "fsdp"
         else:
-            self.device = device or "cuda:0"
-            model = self._load_glm(model_id)
-        self.tokenizer = ChatGLMTokenizer.from_pretrained(model_id)
-        self.config = LoraConfig(
-            # peft config
-            peft_type="LORA",
-            task_type=TaskType.CAUSAL_LM,
-            inference_mode=False,
-            # lora config
-            target_modules=["query_key_value"],
-            r=lora_r,
-            lora_alpha=lora_alpha,
-            lora_dropout=lora_dropout,
-            enable_lora=[True, False, True],
-            bias="none",
-        )
-        print("Processing peft model")
-        self.model = get_peft_model(model, self.config)
-        print_trainable_parameters(self.model)
+            msg = f"Invalid config: \n"
+            msg += "  if load_in_8bit=True         ==> 8 bit without FSDP \n"
+            msg += "  if device!=None              ==> use the specified single GPU \n"
+            msg += "  if device=None & gpu_num > 1 ==> FSDP mode \n"
+            raise ValueError(msg)
+        
+        print(f"You are in {self.mode} mode")
+        print(f"Loading tokenizer {model_id}")
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+        self.lora_config = LoraConfigLoader(
+            lora_r, lora_alpha, lora_dropout
+        ).get_config(self.model_name)
+        self.model_is_setup = False
+
+        self.dataloader = None
+        self.trainer = None
+        self.max_input_length = self.get_max_input_length(self.model_name)
 
         self.stop_tokens = ["问题："]
-        self.builtin_stop_tensor_list = self.init_stop_tensor_list()
+        self.builtin_stop_tensor_list = create_token_tensor_list(
+            self.tokenizer, self.stop_tokens
+        )
 
     def __cast_small_to(self, dtype: torch.Type):
         for name, param in self.model.named_parameters():
@@ -105,47 +134,112 @@ class GlmLora:
         for name, param in self.model.named_parameters():
             if "lora_" in name:
                 param.data = param.data.to(dtype)
-
-    def _load_8bit_glm(self, model_id: str) -> PreTrainedModel:
-        model = ChatGLMForConditionalGeneration.from_pretrained(
-            model_id, load_in_8bit=True, device_map="auto")
-        for param in model.parameters():
-            param.requires_grad = False
+    
+    def load_model(self, model_id: str) -> PreTrainedModel:
+        if self.load_in_8bit:
+            device_map = "auto"
+        else:
+            device_map = None
+        model = AutoModel.from_pretrained(
+            model_id, load_in_8bit=self.load_in_8bit, device_map=device_map, trust_remote_code=True
+        )
+        if self.device:
+            model.to(self.device)
         return model
 
-    def _load_glm(self, model_id: str) -> PreTrainedModel:
-        model = ChatGLMForConditionalGeneration.from_pretrained(
-            model_id).to(self.device)
-        for param in model.parameters():
-            param.requires_grad = False
-        return model
-
-    def load_pretrained(self, pt_path: str):
-        static = torch.load(pt_path)
-        self.model.load_state_dict(static, strict=False)
+    def load_pretrained(self, pt_path: Optional[str]):
+        self.model = self.load_model(self.model_id)
+        if pt_path is not None:
+            static = torch.load(pt_path)
+            self.model = LoraModel(self.model, self.lora_config)
+            self.model.load_state_dict(static, strict=False)
         return self
 
     def load_data(self, data_path: str, max_seq_len: int = 512):
         print(f"Loading data with max_seq_len: {max_seq_len}")
         self.dataloader = GlmDataLoader(data_path, self.tokenizer, max_seq_len)
         return self
+    
+    def fsdp_tune(
+        self, 
+        rank: int, 
+        world_size: int,
+        params: Dict[str, Any]
+    ) -> None:
+        assert self.mode == "fsdp", "Only for FSDP"
+        assert self.dataloader is not None, "Please `load_data` first"
+        assert "batch_size" in params, "batch_size is a must parameter"
+        batch_size = params.get("batch_size")
+        strategy = params.get("strategy", "fsdp_zero3")
+        if not self.model_is_setup:
+            self.model = self.load_model(self.model_id).half()
+            setup(rank, world_size)
+            train_loader, val_loader = self.dataloader.train_dev_split(batch_size, True, rank)
+            auto_wrap_policy = get_transformer_wrap_policy(self.model, "GLMBlock")
+            sharding_strategy = get_sharding_strategy(strategy)
+            mp_policy = get_mp_policy()
+            torch.cuda.set_device(rank)
+            print("Processing Lora Model in FSDP mode...")
+            self.model = FSDP(
+                LoraModel(self.model, self.lora_config),
+                auto_wrap_policy=auto_wrap_policy,
+                sharding_strategy=sharding_strategy,
+                cpu_offload=CPUOffload(offload_params=True),
+                mixed_precision=mp_policy,
+                device_id=torch.cuda.current_device(),
+            )
+            print_trainable_parameters(self.model)
+            self.model_is_setup = True
+            self.trainer = Trainer(
+                lr=params.get("lr", 2e-4),
+                num_epochs=params.get("num_epochs", 2),
+                warmup_steps=params.get("warmup_steps"),
+                accumulate_steps=1,
+                out_dir=params.get("out_dir", "./output/"),
+                device=None,
+                print_every=params.get("print_every"),
+            )
+        self.model.lm_head = CastOutputToFloat(self.model.lm_head)
+        self.__cast_lora_to(torch.float32)
+        self.trainer.train(self.model, train_loader, val_loader, True, rank)
+        dist.barrier()
+        cleanup()
 
     def tune(
         self,
         batch_size: int = 1,
         lr: float = 2e-4,
-        num_epochs: int = 10,
+        num_epochs: int = 2,
         warmup_steps: Optional[int] = None,
         accumulate_steps: Optional[int] = 32,
         out_dir: str = "./output/",
-        print_every: int = 10,
-    ):
+        print_every: Optional[int] = None,
+    ) -> None:
         """
         Note
         -----------
         if `warmup_steps` is None, will use one epoch to warmup by default
         if `accumulate_steps` is None, will use 1 as default
         """
+        assert self.mode in ["8bit", "single_gpu"], "Not suit for FSDP, please specify `load_in_8bit` or `device`"
+        assert self.dataloader is not None, "Please `load_data` first"
+
+        if not self.model_is_setup:
+            self.model = self.load_model(self.model_id)
+            print("Processing Lora Model in NORMAL mode...")
+            self.model = LoraModel(self.model, self.lora_config)
+            print_trainable_parameters(self.model)
+            self.trainer = Trainer(
+                lr,
+                num_epochs,
+                warmup_steps,
+                accumulate_steps,
+                out_dir,
+                device=self.device,
+                print_every=print_every,
+            )
+            self.model_is_setup = True
+        
         print("Switch to training mode...")
         if self.load_in_8bit:
             self.__cast_small_to(torch.float32)
@@ -157,25 +251,17 @@ class GlmLora:
             self.model.to(self.device).train()
         else:
             self.model.train()
-        trainer = Trainer(
-            lr,
-            num_epochs,
-            warmup_steps,
-            accumulate_steps,
-            out_dir,
-            device=self.device,
-            print_every=print_every,
-        )
+        
         train_dl, dev_dl = self.dataloader.train_dev_split(batch_size)
         print("Begining tunning")
-        trainer.train(self.model, train_dl, dev_dl)
+        self.trainer.train(self.model, train_dl, dev_dl)
 
     def eval(self, quant_bit: Optional[int] = None):
         print("Switch to inference mode...")
         self.model.half()
         if self.load_in_8bit:
             self.__cast_lora_to(torch.float32)
-        self.model.base_model.peft_config.inference_mode = True
+        self.model.lora_config.inference_mode = True
         self.model.config.use_cache = True
         if quant_bit is not None:
             self.model.quantize(quant_bit)
@@ -184,35 +270,107 @@ class GlmLora:
             self.model.to(self.device).eval()
         else:
             self.model.eval()
+    
+    @property
+    def get_max_input_length(self, model_name: str) -> int:
+        return 2048
+    
+    def get_generate_config(
+        self,
+        max_new_tokens: int,
+        do_sample: bool,
+        num_beams: int,
+        temperature: float,
+        top_p: float,
+        repetition_penalty: float,
+        logits_processor=None,
+        stopping_criteria=None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        if logits_processor is None:
+            logits_processor = LogitsProcessorList()
+        logits_processor.append(InvalidScoreLogitsProcessor())
+        if stopping_criteria is None:
+            stopping_criteria = StoppingCriteriaList()
+        
+        gen_kwargs = {
+            "max_length": max_new_tokens,
+            "do_sample": do_sample,
+            "num_beams": num_beams,
+            "temperature": temperature,
+            "top_p": top_p,
+            "repetition_penalty": repetition_penalty,
+            
+            "logits_processor": logits_processor,
+            "stopping_criteria": stopping_criteria,
+            **kwargs
+        }
+        """
+        # Glm GenerationConfig
+        GenerationConfig {
+            "_from_model_config": true,
+            "bos_token_id": 130004,
+            "eos_token_id": 130005,
+            "pad_token_id": 3,
+            "transformers_version": "4.28.1"
+        }
+        """
+        return gen_kwargs
+    
+    @torch.no_grad()
+    def generate(
+        self,
+        sents: Union[str, List[str]],
+        max_new_tokens: int = 512,
+        do_sample: bool = True,
+        num_beams: int = 1,
+        temperature: float = 0.2,
+        top_p: float = 0.7,
+        repetition_penalty: float = 1.02,
+        logits_processor=None,
+        stopping_criteria=None,
+        **kwargs
+    ):
+        prompt_len = self.max_input_length - max_new_tokens - 8
+        if type(sents) == str:
+            sents = [sents]
+        sents = [v[-prompt_len:] for v in sents]
+        inputs = tokenizer(sents, return_tensors="pt", padding=True)
+        inputs = inputs.to(self.curr_device)
+        gen_kwargs = self.get_generate_config(
+            max_new_tokens, do_sample, num_beams, temperature, top_p, repetition_penalty,
+            logits_processor, stopping_criteria, **kwargs,
+        )
+        outputs = self.model.generate(
+            **inputs,
+            **gen_kwargs,
+        )
+        batch_out_sents = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        res = []
+        for i, out_s in enumerate(batch_out_sents):
+            inp_s = sents[i]
+            out_s = out_s.replace(inp_s, "")
+            res.append(out_s)
+        return res
 
     @torch.no_grad()
     def stream_chat(
         self,
         query: str,
         history: List[Tuple[str, str]] = None,
-        max_length: int = 2048,
-        do_sample=True,
-        top_p=0.7,
-        temperature=0.95,
+        max_new_tokens: int = 512,
+        do_sample: bool = True,
+        num_beams: int = 1,
+        temperature: float = 0.95,
+        top_p: float = 0.7,
+        repetition_penalty: float = 1.02,
         logits_processor=None,
         stopping_criteria=None,
         **kwargs
     ):
+        # remain some places for special tokens
+        prompt_len = self.max_input_length - max_new_tokens - 8
         "From ChatGLM Model"
-        if logits_processor is None:
-            logits_processor = LogitsProcessorList()
-        logits_processor.append(InvalidScoreLogitsProcessor())
-        if stopping_criteria is None:
-            stopping_criteria = StoppingCriteriaList()
-        gen_kwargs = {
-            "max_length": max_length,
-            "do_sample": do_sample,
-            "top_p": top_p,
-            "temperature": temperature,
-            "logits_processor": logits_processor,
-            "stopping_criteria": stopping_criteria,
-            **kwargs
-        }
         if not history:
             prompt = query
         else:
@@ -221,11 +379,15 @@ class GlmLora:
                 prompt += "[Round {}]\n 问：{}\n 答：{}\n".format(
                     i, old_query, response)
             prompt += "[Round {}]\n 问：{}\n 答：".format(len(history), query)
+        prompt = prompt[-prompt_len:]
         inputs = self.tokenizer([prompt], return_tensors="pt")
         inputs = inputs.to(self.curr_device)
-
+        gen_kwargs = self.get_generate_config(
+            max_new_tokens, do_sample, num_beams, temperature, top_p, repetition_penalty,
+            logits_processor, stopping_criteria, **kwargs,
+        )
         for outputs in self.model.stream_generate(
-            inputs["input_ids"], **gen_kwargs
+            **inputs, **gen_kwargs
         ):
             outputs = outputs.tolist()[0][len(inputs["input_ids"][0]):]
             response = self.tokenizer.decode(outputs)
@@ -237,9 +399,12 @@ class GlmLora:
         self,
         inp: str,
         history: List[Tuple[str, str]] = None,
-        max_len: int = 512,
+        max_new_tokens: int = 512,
+        do_sample: bool = True,
+        num_beams: int = 1,
         temperature: float = 0.95,
         top_p: float = 0.7,
+        repetition_penalty: float = 1.02,
         stop: List[str] = []
     ):
         if not history:
@@ -259,7 +424,7 @@ class GlmLora:
                 self.curr_device)]
 
         for response, history in self.stream_chat(
-            inp, history, max_len,
+            inp, history, max_new_tokens,
             top_p=top_p, temperature=temperature,
             stopping_criteria=StoppingCriteriaList(custom_stop_list),
         ):
@@ -271,11 +436,3 @@ class GlmLora:
         if self.device is None:
             return self.model.device
         return self.device
-
-    def init_stop_tensor_list(self) -> List[Tensor["L", torch.LongTensor]]:
-        init_tensor_list = [
-            torch.LongTensor([20002]),  # eos
-            torch.LongTensor([150005]),  # eop
-        ]
-        new_add = create_token_tensor_list(self.tokenizer, self.stop_tokens)
-        return init_tensor_list + new_add

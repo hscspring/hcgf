@@ -4,11 +4,12 @@ import os
 
 from hcgf.data_model import DataItem
 from hcgf.dataloader.data_loader import GlmDataLoader
-from hcgf.sft.chatglm.tokenization_chatglm import ChatGLMTokenizer
+
+from transformers import AutoTokenizer
 
 root = os.path.dirname(os.path.abspath(__file__))
 
-tokenizer = ChatGLMTokenizer.from_pretrained("THUDM/chatglm-6b")
+tokenizer = AutoTokenizer.from_pretrained("THUDM/chatglm-6b", trust_remote_code=True)
 
 
 @pytest.fixture
@@ -44,7 +45,7 @@ def mocked_dataset():
     {"prompt": "你好", "completion": "谁"},
     """
     data = [
-        DataItem([5, 94874, 94874, 94874, 130001, 130004, 5, 88443, 2], 6),
-        DataItem([5, 94874, 130001, 130004, 5, 84480, 2], 4),
+        DataItem([5, 94874, 94874, 94874, 130001, 130004, 5, 88443, 130005], 6),
+        DataItem([5, 94874, 130001, 130004, 5, 84480, 130005], 4),
     ]
     return data

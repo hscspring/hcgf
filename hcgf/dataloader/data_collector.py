@@ -24,11 +24,9 @@ class GlmDataCollector:
     130000 [MASK]  # mask
     130001 [gMASK] # gmask
     130004 <sop>   # bos
-    130005 <eop>   # eop
-    2      </s>    # eos
+    130005 <eop>   # eos
     3      <pad>   # pad
     0      <unk>   # unk
-    130002 [sMASK] # smask
     """
 
     @classmethod
@@ -51,11 +49,11 @@ class GlmDataCollector:
         mask_position: int,
         use_gmask: bool,
         position_encoding_2d: bool = True,
-        dtype=torch.int64,
     ):
         """
         Referenced from ChatGLMMModel.get_position_ids
         """
+        dtype=torch.int64
         position_ids = torch.arange(longest_seq_len, dtype=dtype)
         if position_encoding_2d:
             # NOTE: if position_encoding_2d, use_gmask is not used
@@ -76,7 +74,6 @@ class GlmDataCollector:
     def collate_fn(
         cls,
         data_items: List[DataItem],
-        input_dtype: torch.Type = torch.int64
     ) -> GlmBatchInput:
         len_ids = [len(v.input_ids) for v in data_items]
         longest_seq_len = max(len_ids)
@@ -100,23 +97,19 @@ class GlmDataCollector:
             cxt_idx = ids.index(130004)
             _pids = cls.get_position_ids(
                 longest_seq_len, cxt_idx, mask_position, use_gmask,
-                position_encoding_2d=True, dtype=input_dtype
+                position_encoding_2d=True
             )
 
             padding_len = longest_seq_len - seq_len
             _labels = [-100] * (cxt_len - 1) + \
                 ids[(cxt_len - 1):] + [-100] * padding_len
-            _ids = ids + [2] * padding_len
+            # pad_id: 3
+            _ids = ids + [3] * padding_len
 
-            if input_dtype == torch.int32:
-                TensorIns = torch.IntTensor
-            else:
-                TensorIns = torch.LongTensor
-
-            id_list.append(TensorIns(_ids))
+            id_list.append(torch.LongTensor(_ids))
             pid_list.append(_pids)
             mask_list.append(_masks)
-            label_list.append(TensorIns(_labels))
+            label_list.append(torch.LongTensor(_labels))
         input_ids = torch.stack(id_list)
         position_ids = torch.stack(pid_list)
         attention_mask = torch.stack(mask_list)

@@ -1,9 +1,11 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 import json
 
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.data.distributed import DistributedSampler
+
 from transformers.tokenization_utils import PreTrainedTokenizer
 from pnlp import Reader
 
@@ -42,7 +44,7 @@ class GlmDataLoader:
     ) -> Tuple[List[Dict], List[Dict]]:
         total = len(data)
         test_num = int(total * test_size)
-        assert test_num < total, f"{self}: test number must less than total number"
+        assert test_num < total, f"{self}: test number: {test_num} must less than total number: {total}"
         picked = np.random.choice(total, size=test_num, replace=False)
         d1, d2 = [], []
         for i, v in enumerate(data):
@@ -55,35 +57,56 @@ class GlmDataLoader:
     def train_dev_split(
         self,
         batch_size: int,
+        is_distributed: bool = False,
+        rank: Optional[int] = None,
     ) -> Tuple[DataLoader, DataLoader]:
         train, dev = self._split(self.data, test_size=0.1)
         train_dataset = GlmMapStyleDataset(
             train, self.tokenizer, self.max_seq_len)
         dev_dataset = GlmMapStyleDataset(dev, self.tokenizer, self.max_seq_len)
-        tdl = self._build_dataloader(train_dataset, batch_size, True)
-        ddl = self._build_dataloader(dev_dataset, batch_size, True)
+        # shuffle
+        tdl = self._build_dataloader(train_dataset, batch_size, True, is_distributed, rank)
+        # not shuffle
+        ddl = self._build_dataloader(dev_dataset, batch_size, False, is_distributed, rank)
         return tdl, ddl
 
-    def load(self, batch_size: int, shuffle: bool = True):
+    def load(
+        self,
+        batch_size: int,
+        shuffle: bool = True,
+        is_distributed: bool = False,
+        rank: Optional[int] = None
+    ) -> DataLoader:
         ds = GlmMapStyleDataset(self.data, self.tokenizer, self.max_seq_len)
-        dl = self._build_dataloader(ds, batch_size, shuffle)
+        dl = self._build_dataloader(ds, batch_size, shuffle, is_distributed, rank)
         return dl
 
     def _build_dataloader(
         self,
         dataset: GlmMapStyleDataset,
         batch_size: int,
-        shuffle: bool
+        shuffle: bool, 
+        is_distributed: bool = False,
+        rank: Optional[int] = None,
     ) -> DataLoader:
+        if is_distributed:
+            assert rank is not None, f"rank should not be None under distribute setting"
+            world_size = torch.cuda.device_count()
+            assert world_size > 0, f"world size should be greater than 1, but got {world_size}"
+            sampler = DistributedSampler(dataset, num_replicas=world_size, rank=rank, shuffle=shuffle)
+            dl_shuffle = False
+        else:
+            sampler = None
+            dl_shuffle = shuffle
         dataloader = DataLoader(
             dataset,
-            shuffle=shuffle,
-            collate_fn=lambda batch: GlmDataCollector.collate_fn(
-                batch,
-                input_dtype=self.input_dtype),
             batch_size=batch_size,
-            pin_memory=True)
+            shuffle=dl_shuffle,
+            sampler=sampler,
+            collate_fn=GlmDataCollector.collate_fn,
+            pin_memory=True
+        )
         return dataloader
-
+    
     def __len__(self) -> int:
         return len(self.data)

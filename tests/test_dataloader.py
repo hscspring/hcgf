@@ -37,16 +37,16 @@ arr_dtype = np.int64
 
 input_ids = np.array(
     [
-        [5, 94874, 94874, 94874, 130001, 130004, 5, 88443, 2],
-        [5, 94874, 130001, 130004, 5, 84480, 2, 2, 2],
+        [5, 94874, 94874, 94874, 130001, 130004, 5, 88443, 130005],
+        [5, 94874, 130001, 130004, 5, 84480, 130005, 3, 3],
     ],
     dtype=arr_dtype
 )
 
 labels = np.array(
     [
-        [-100, -100, -100, -100, -100, 130004, 5, 88443, 2],
-        [-100, -100, -100, 130004, 5, 84480, 2, -100, -100],
+        [-100, -100, -100, -100, -100, 130004, 5, 88443, 130005],
+        [-100, -100, -100, 130004, 5, 84480, 130005, -100, -100],
     ],
     dtype=arr_dtype
 )
@@ -97,6 +97,7 @@ def test_data_collector(mocked_dataset, inp_key, shape, expected):
     assert type(binp) == dict
     val = binp[inp_key]
     assert tuple(val.shape) == shape
+    print(val.numpy())
     assert np.alltrue(val.numpy() == expected)
 
 
