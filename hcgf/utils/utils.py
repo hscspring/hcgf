@@ -66,6 +66,8 @@ def create_token_tensor_list(
         tids = tokenizer(
             token, add_special_tokens=False, return_tensors="pt"
         )["input_ids"].squeeze()[1:]
+        if len(tids) == 0:
+            continue
         tensor_list.append(tids)
     return tensor_list
 
