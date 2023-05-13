@@ -1,4 +1,5 @@
 cpm_kernels
-peft
 transformers
 pnlp
+looseversion
+gradio

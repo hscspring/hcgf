@@ -52,8 +52,8 @@ model = Model()
 
 @pytest.mark.parametrize("lr", [1e-1])
 @pytest.mark.parametrize("num_epochs", [1, 2])
-@pytest.mark.parametrize("warmup_steps", [None, 10])
-@pytest.mark.parametrize("accumulate_steps", [1, 8])
+@pytest.mark.parametrize("warmup_steps", [0, None, 0.5, 1])
+@pytest.mark.parametrize("accumulate_steps", [None, 1, 8])
 def test_trainer(lr, num_epochs, warmup_steps, accumulate_steps):
     out_path = "./test_output/"
     trainer = Trainer(

@@ -1,6 +1,7 @@
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, List, Tuple, Dict, Any, Union
 import copy
 
+from pnlp import MagicDict
 import torch
 import torch.nn as nn
 import torch.distributed as dist
@@ -18,8 +19,7 @@ from transformers.generation.utils import (
 )
 from transformers.generation.logits_process import LogitsProcessor
 
-from .lora_model import LoraModel
-from .lora_config import LoraConfigLoader
+from .lora import LoraModel, LoraConfigLoader
 from ..dataloader import GlmDataLoader
 from ..data_model import Tensor
 from ..trainer import Trainer
@@ -117,8 +117,6 @@ class GlmLora:
         self.model_is_setup = False
 
         self.dataloader = None
-        self.trainer = None
-        self.max_input_length = self.get_max_input_length(self.model_name)
 
         self.stop_tokens = ["问题："]
         self.builtin_stop_tensor_list = create_token_tensor_list(
@@ -148,10 +146,12 @@ class GlmLora:
         return model
 
     def load_pretrained(self, pt_path: Optional[str]):
-        self.model = self.load_model(self.model_id)
+        if not self.model_is_setup:
+            self.model = self.load_model(self.model_id)
+            self.model = LoraModel(self.model, self.lora_config)
+            self.model_is_setup = True
         if pt_path is not None:
             static = torch.load(pt_path)
-            self.model = LoraModel(self.model, self.lora_config)
             self.model.load_state_dict(static, strict=False)
         return self
 
@@ -169,17 +169,33 @@ class GlmLora:
         assert self.mode == "fsdp", "Only for FSDP"
         assert self.dataloader is not None, "Please `load_data` first"
         assert "batch_size" in params, "batch_size is a must parameter"
-        batch_size = params.get("batch_size")
-        strategy = params.get("strategy", "fsdp_zero3")
+        def build_tune_params():
+            default = {
+                "strategy": "fsdp_zero3",
+                "lr": 2e-4,
+                "num_epochs": 3,
+                "warmup_steps": None,
+                "accumulate_steps": None,
+                "out_dir": "./output/",
+                "print_every": None,
+            }
+            for key in default:
+                if key not in params:
+                    params[key] = default[key]
+
+        build_tune_params()
+        args = MagicDict(params)
+        strategy = args.get("strategy", "fsdp_zero3")
         if not self.model_is_setup:
             self.model = self.load_model(self.model_id).half()
             setup(rank, world_size)
-            train_loader, val_loader = self.dataloader.train_dev_split(batch_size, True, rank)
-            auto_wrap_policy = get_transformer_wrap_policy(self.model, "GLMBlock")
+            train_loader, val_loader = self.dataloader.train_dev_split(args.batch_size, True, rank)
+            auto_wrap_policy = get_transformer_wrap_policy(self.model, self.transformer_block)
             sharding_strategy = get_sharding_strategy(strategy)
             mp_policy = get_mp_policy()
             torch.cuda.set_device(rank)
-            print("Processing Lora Model in FSDP mode...")
+            if rank == 0:
+                print(f"Processing Lora Model in {self.mode} mode...")
             self.model = FSDP(
                 LoraModel(self.model, self.lora_config),
                 auto_wrap_policy=auto_wrap_policy,
@@ -188,20 +204,22 @@ class GlmLora:
                 mixed_precision=mp_policy,
                 device_id=torch.cuda.current_device(),
             )
-            print_trainable_parameters(self.model)
+            if rank == 0:
+                print_trainable_parameters(self.model)
             self.model_is_setup = True
-            self.trainer = Trainer(
-                lr=params.get("lr", 2e-4),
-                num_epochs=params.get("num_epochs", 2),
-                warmup_steps=params.get("warmup_steps"),
-                accumulate_steps=1,
-                out_dir=params.get("out_dir", "./output/"),
-                device=None,
-                print_every=params.get("print_every"),
-            )
+        
+        trainer = Trainer(
+            lr=args.lr,
+            num_epochs=args.num_epochs,
+            warmup_steps=args.warmup_steps,
+            accumulate_steps=args.accumulate_steps,
+            out_dir=args.out_dir,
+            device=None,
+            print_every=args.print_every,
+        )
         self.model.lm_head = CastOutputToFloat(self.model.lm_head)
         self.__cast_lora_to(torch.float32)
-        self.trainer.train(self.model, train_loader, val_loader, True, rank)
+        trainer.train(self.model, train_loader, val_loader, True, rank)
         dist.barrier()
         cleanup()
 
@@ -209,7 +227,7 @@ class GlmLora:
         self,
         batch_size: int = 1,
         lr: float = 2e-4,
-        num_epochs: int = 2,
+        num_epochs: int = 3,
         warmup_steps: Optional[int] = None,
         accumulate_steps: Optional[int] = 32,
         out_dir: str = "./output/",
@@ -218,7 +236,7 @@ class GlmLora:
         """
         Note
         -----------
-        if `warmup_steps` is None, will use one epoch to warmup by default
+        if `warmup_steps` is None, will use 1/3 epoch to warmup by default
         if `accumulate_steps` is None, will use 1 as default
         """
         assert self.mode in ["8bit", "single_gpu"], "Not suit for FSDP, please specify `load_in_8bit` or `device`"
@@ -226,20 +244,20 @@ class GlmLora:
 
         if not self.model_is_setup:
             self.model = self.load_model(self.model_id)
-            print("Processing Lora Model in NORMAL mode...")
+            print(f"Processing Lora Model in {self.mode} mode...")
             self.model = LoraModel(self.model, self.lora_config)
             print_trainable_parameters(self.model)
-            self.trainer = Trainer(
-                lr,
-                num_epochs,
-                warmup_steps,
-                accumulate_steps,
-                out_dir,
-                device=self.device,
-                print_every=print_every,
-            )
             self.model_is_setup = True
         
+        trainer = Trainer(
+            lr,
+            num_epochs,
+            warmup_steps,
+            accumulate_steps,
+            out_dir,
+            device=self.device,
+            print_every=print_every,
+        )
         print("Switch to training mode...")
         if self.load_in_8bit:
             self.__cast_small_to(torch.float32)
@@ -254,7 +272,7 @@ class GlmLora:
         
         train_dl, dev_dl = self.dataloader.train_dev_split(batch_size)
         print("Begining tunning")
-        self.trainer.train(self.model, train_dl, dev_dl)
+        trainer.train(self.model, train_dl, dev_dl)
 
     def eval(self, quant_bit: Optional[int] = None):
         print("Switch to inference mode...")
@@ -272,8 +290,15 @@ class GlmLora:
             self.model.eval()
     
     @property
-    def get_max_input_length(self, model_name: str) -> int:
+    def max_input_length(self) -> int:
         return 2048
+    
+    @property
+    def transformer_block(self) -> str:
+        if self.model_name == "chatglm":
+            return "GLMBlock"
+        elif self.model_name == "llama":
+            return ""
     
     def get_generate_config(
         self,

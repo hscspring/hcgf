@@ -25,8 +25,8 @@ class Trainer:
         self,
         lr: float,
         num_epochs: int,
-        warmup_steps: int,
-        accumulate_steps: int,
+        warmup_steps: Optional[int],
+        accumulate_steps: Optional[int],
         out_dir: str,
         device: Optional[str],
         print_every: Optional[int],
@@ -62,17 +62,19 @@ class Trainer:
         else:
             accumulate_steps = self.accumulate_steps
         batch_num = len(train_dataloader)
-        epoch_update_steps = int(batch_num / accumulate_steps)
+        epoch_update_steps = batch_num // accumulate_steps
+        total_update_steps = (batch_num * self.num_epochs) // accumulate_steps
+
+        # use 1/3 epoch to warmup
         if self.warmup_steps is None:
-            warmup_update_steps = epoch_update_steps
+            warmup_steps = epoch_update_steps // 3
         else:
-            warmup_update_steps = self.warmup_steps
-        total_update_steps = epoch_update_steps * self.num_epochs
+            warmup_steps = self.warmup_steps
 
         # stops when 3 epochs do not improve
-        early_stop_steps = 3 * batch_num
+        early_stop_steps = 3 * batch_num # * accumulate_steps
         # every 1/3 epoch do evaluation
-        valid_steps = batch_num // 3 + 1
+        valid_steps = batch_num // 3 # * accumulate_steps
 
         # every 1/10 epoch print
         if self.print_every is None:
@@ -83,9 +85,11 @@ class Trainer:
 
         if rank == 0:
             msg = f"Total data batches: {batch_num}, "
-            msg += f"Epoch update steps: {epoch_update_steps}, "
-            msg += f"Total update steps: {total_update_steps}, "
-            msg += f"\nWarmup update steps: {warmup_update_steps}, "
+            msg += f"Accumulate steps: {accumulate_steps}, "
+            msg += f"Epoch update steps (batch_num//accumulate_steps): {epoch_update_steps}, "
+            msg += f"\nEpochs: {self.num_epochs}, "
+            msg += f"Total update steps (batch_num*epochs//accumulate_steps): {total_update_steps}, "
+            msg += f"\nWarmup steps: {warmup_steps}, "
             msg += f"Validation steps: {valid_steps}, "
             msg += f"Early stop steps: {early_stop_steps}, "
             msg += f"Print every: {print_every}"
@@ -93,7 +97,7 @@ class Trainer:
 
         lr_scheduler = get_linear_schedule_with_warmup(
             optimizer=optimizer,
-            num_warmup_steps=warmup_update_steps,
+            num_warmup_steps=warmup_steps,
             num_training_steps=total_update_steps,
         )
 
@@ -101,7 +105,7 @@ class Trainer:
         total_step = 0
         last_improve = 0
         flag = False
-        for epoch in range(self.num_epochs):
+        for epoch in range(1, self.num_epochs+1):
             model.train()
             if is_distributed:
                 train_loss = torch.zeros(1).to(rank)
@@ -188,6 +192,8 @@ class Trainer:
 
             if flag:
                 break
+        del optimizer
+        del model
 
     def eval(
         self, model: nn.Module, 
