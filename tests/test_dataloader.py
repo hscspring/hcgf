@@ -6,7 +6,8 @@ import pnlp
 
 from hcgf.dataloader.dataset import GlmMapStyleDataset
 from hcgf.data_model import DataItem
-from hcgf.dataloader.data_collector import GlmDataCollector
+from hcgf.dataloader.data_collector import GlmDataCollector, LlamaDataCollector
+from hcgf.dataloader.preprocessor import Prompter
 
 
 def test_dataset(glm_data_file, glm_tokenizer):
@@ -27,7 +28,7 @@ def test_dataset_max_len(glm_tokenizer, max_len, expected):
     data = [
         {"prompt": "爱爱爱爱", "completion": "谁"}
     ]
-    ds = GlmMapStyleDataset(data, glm_tokenizer, max_len)
+    ds = GlmMapStyleDataset(data, glm_tokenizer, max_len, remain_len=0)
     v = ds[0]
     # 爱爱爱爱 encode后长度为7，超过后变为5，加上completion的三个：空白符、谁、EOS，共8个token
     assert len(v.input_ids) == expected
@@ -37,16 +38,16 @@ arr_dtype = np.int64
 
 input_ids = np.array(
     [
-        [5, 94874, 94874, 94874, 130001, 130004, 5, 88443, 130005],
-        [5, 94874, 130001, 130004, 5, 84480, 130005, 3, 3],
+        [5, 74874, 74874, 74874, 130001, 130004, 5, 68443, 130005],
+        [5, 74874, 130001, 130004, 5, 64480, 130005, 3, 3],
     ],
     dtype=arr_dtype
 )
 
 labels = np.array(
     [
-        [-100, -100, -100, -100, -100, 130004, 5, 88443, 130005],
-        [-100, -100, -100, 130004, 5, 84480, 130005, -100, -100],
+        [-100, -100, -100, -100, -100, 130004, 5, 68443, 130005],
+        [-100, -100, -100, 130004, 5, 64480, 130005, -100, -100],
     ],
     dtype=arr_dtype
 )
@@ -92,13 +93,69 @@ attention_mask = np.array(
     ("attention_mask", (2, 1, 9, 9), attention_mask),
     ("labels", (2, 9), labels),
 ])
-def test_data_collector(mocked_dataset, inp_key, shape, expected):
-    binp = GlmDataCollector.collate_fn(mocked_dataset)
+def test_glm_data_collector(mocked_data, glm_tokenizer, inp_key, shape, expected):
+    ds = GlmMapStyleDataset(mocked_data, glm_tokenizer, 32)
+    binp = GlmDataCollector.collate_fn(ds)
     assert type(binp) == dict
     val = binp[inp_key]
     assert tuple(val.shape) == shape
-    print(val.numpy())
     assert np.alltrue(val.numpy() == expected)
+
+
+input_ids = np.array(
+    [
+        [   0, 0, 0, 1, 29871, 30919, 31076, 30919, 31076, 30919, 31076, 
+            30392, 235, 179, 132, 2],
+        [   0, 0, 0, 0, 0, 0, 0, 0, 1, 29871, 30919, 31076,
+            235, 179, 132, 2]
+    ],
+    dtype=arr_dtype
+)
+
+# mask input
+labels_mask_input = np.array(
+    [
+        [   -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, 
+            30392, 235, 179, 132, 2],
+        [   -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100, -100,
+            235, 179, 132, 2]
+    ],
+    dtype=arr_dtype
+)
+
+# no mask input
+labels = np.array(
+    [
+        [   -100, -100, -100, 1, 29871, 30919, 31076, 30919, 31076, 30919, 31076, 
+            30392, 235, 179, 132, 2],
+        [   -100, -100, -100, -100, -100, -100, -100, -100, 1, 29871, 30919, 31076,
+            235, 179, 132, 2]
+    ],
+    dtype=arr_dtype
+)
+
+attention_mask = np.array(
+    [
+        [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1]
+    ],
+    dtype=np.bool_
+)
+
+
+@pytest.mark.parametrize("inp_key,shape,expected", [
+    ("input_ids", (2, 16), input_ids),
+    ("attention_mask", (2, 16), attention_mask),
+    ("labels", (2, 16), labels_mask_input),
+])
+def test_llama_data_collector(mocked_data, llama_tokenizer, inp_key, shape, expected):
+    ds = GlmMapStyleDataset(mocked_data, llama_tokenizer, 32)
+    binp = LlamaDataCollector.collate_fn(ds)
+    assert type(binp) == dict
+    val = binp[inp_key]
+    assert tuple(val.shape) == shape
+    assert np.alltrue(val.numpy() == expected)
+
 
 
 @pytest.mark.parametrize("func,expected", [
@@ -138,3 +195,25 @@ def test_dataset_collector(glm_tokenizer, inp_key, shape):
     binp = GlmDataCollector.collate_fn(ds)
     val = binp[inp_key]
     assert tuple(val.shape) == shape
+
+
+@pytest.mark.parametrize("instruction", [None, "", "instruction"])
+def test_prompter(instruction):
+    prompter = Prompter()
+    model = "llama"
+    func = getattr(prompter, f"build_{model}_instruction")
+    inp = func(instruction, "prompt")
+    assert type(inp) == str
+
+
+@pytest.mark.parametrize("instruction", [None, "", "请说话"])  # 2tokens
+@pytest.mark.parametrize("max_seq_len", [60, 128])  # 最少49+8=57
+def test_process_prompt(instruction, max_seq_len, glm_tokenizer):
+    prompter = Prompter()
+    prompt = "你叫什么名字" # 3tokens
+    new = prompter.process_prompt(glm_tokenizer, instruction, prompt, max_seq_len)
+    assert type(new) == str
+    if max_seq_len == 128 or not instruction:
+        assert new == prompt
+    else:
+        assert new == "名字" # prompt只能保留1个tokens（57+2+1=60），所以为`名字`

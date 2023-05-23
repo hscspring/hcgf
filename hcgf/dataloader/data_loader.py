@@ -10,7 +10,7 @@ from transformers.tokenization_utils import PreTrainedTokenizer
 from pnlp import Reader
 
 from .dataset import GlmMapStyleDataset
-from .data_collector import GlmDataCollector
+from .data_collector import GlmDataCollector, LlamaDataCollector
 
 
 class GlmDataLoader:
@@ -61,8 +61,7 @@ class GlmDataLoader:
         rank: Optional[int] = None,
     ) -> Tuple[DataLoader, DataLoader]:
         train, dev = self._split(self.data, test_size=0.1)
-        train_dataset = GlmMapStyleDataset(
-            train, self.tokenizer, self.max_seq_len)
+        train_dataset = GlmMapStyleDataset(train, self.tokenizer, self.max_seq_len)
         dev_dataset = GlmMapStyleDataset(dev, self.tokenizer, self.max_seq_len)
         # shuffle
         tdl = self._build_dataloader(train_dataset, batch_size, True, is_distributed, rank)
@@ -98,12 +97,21 @@ class GlmDataLoader:
         else:
             sampler = None
             dl_shuffle = shuffle
+        
+        if self.tokenizer.model_name == "llama":
+            collate_fn = LlamaDataCollector.collate_fn
+        elif self.tokenizer.model_name == "chatglm":
+            collate_fn = GlmDataCollector.collate_fn
+        else:
+            msg = f"Unsupported data collector: {self.tokenizer.model_name}"
+            raise ValueError(msg)
+
         dataloader = DataLoader(
             dataset,
             batch_size=batch_size,
             shuffle=dl_shuffle,
             sampler=sampler,
-            collate_fn=GlmDataCollector.collate_fn,
+            collate_fn=collate_fn,
             pin_memory=True
         )
         return dataloader

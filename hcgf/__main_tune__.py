@@ -21,13 +21,17 @@ def main():
         help="[dataset] max sequence length (default: 512)"
     )
     parser.add_argument(
-        "--batch_size", type=int, default=world_size * 2, metavar="N",
-        help="[dataset] input batch size for training (default: gpu_num * 2)"
+        "--batch_size", type=int, default=8, metavar="N",
+        help="[dataset] input batch size for training (default: 8)"
     )
     parser.add_argument(
         "--model", type=str, default=None, metavar="ID/PATH", required=True,
         help="[model] LLM model id or model path (default: None)"
     ) 
+    parser.add_argument(
+        "--pretrained_ckpt", type=str, default=None, metavar="FILE",
+        help="[model] pretrained model file path, if provided, the pretrained model ckpt will be loaded (default: None)"
+    )
     parser.add_argument(
         "--lora_r", type=int, default=8, metavar="N",
         help="[model] lora r (default: 8)"
@@ -37,8 +41,8 @@ def main():
         help="[model] device id to run on that specified device, suit for `msds` mode (default: None)"
     )
     parser.add_argument(
-        "--lr", type=float, default=2e-4, metavar="LR",
-        help="[training] learning rate (default: .0002)"
+        "--lr", type=float, default=1e-4, metavar="LR",
+        help="[training] learning rate (default: .0001)"
     )
     parser.add_argument(
         "--num_epochs", type=int, default=3, metavar="N",
@@ -66,14 +70,23 @@ def main():
         glm = GlmLora(args.model, lora_r=args.lora_r)
         glm.load_data(args.data_path, max_seq_len=args.max_seq_len)
         params["strategy"] = args.strategy
+        params["pretrained_ckpt"] = args.pretrained_ckpt
         mp.spawn(glm.fsdp_tune, args=(world_size, params), nprocs=world_size, join=True)
     elif args.strategy == "mpds":
         glm = GlmLora(args.model, lora_r=args.lora_r, load_in_8bit=True)
-        glm.load_data(args.data_path, max_seq_len=args.max_seq_len).tune(**params)
+        (glm
+            .load_data(args.data_path, max_seq_len=args.max_seq_len)
+            .load_pretrained(args.pretrained_ckpt)
+            .tune(**params)
+        )
     elif args.strategy == "msds":
         device = args.device or "cuda:0"
         glm = GlmLora(args.model, lora_r=args.lora_r, device=device)
-        glm.load_data(args.data_path, max_seq_len=args.max_seq_len).tune(**params)
+        (glm
+            .load_data(args.data_path, max_seq_len=args.max_seq_len)
+            .load_pretrained(args.pretrained_ckpt)
+            .tune(**params)
+        )
     else:
         msg = f"Unsupported strategy: {args.strategy}. Run `hcgf_tune -h` to get more help"
         raise ValueError(msg)

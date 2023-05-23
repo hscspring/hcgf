@@ -5,11 +5,13 @@ import os
 from hcgf.data_model import DataItem
 from hcgf.dataloader.data_loader import GlmDataLoader
 
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, LlamaTokenizer
+
 
 root = os.path.dirname(os.path.abspath(__file__))
 
-tokenizer = AutoTokenizer.from_pretrained("THUDM/chatglm-6b", trust_remote_code=True)
+_glm_tokenizer = AutoTokenizer.from_pretrained("THUDM/chatglm-6b", trust_remote_code=True)
+_llama_tokenizer = LlamaTokenizer.from_pretrained("decapoda-research/llama-7b-hf")
 
 
 @pytest.fixture
@@ -19,12 +21,26 @@ def glm_data_file():
 
 @pytest.fixture
 def glm_tokenizer():
-    return tokenizer
+    _glm_tokenizer.max_model_input_len = 2048
+    _glm_tokenizer.model_name = "chatglm"
+    return _glm_tokenizer
+
+
+@pytest.fixture
+def llama_tokenizer():
+    _llama_tokenizer.max_model_input_len = 2048
+    _llama_tokenizer.model_name = "llama"
+    # decapoda got some issue, need fix
+    _llama_tokenizer.pad_token_id = 0
+    _llama_tokenizer.bos_token_id = 1
+    _llama_tokenizer.eos_token_id = 2
+    _llama_tokenizer.padding_side="left"
+    return _llama_tokenizer
 
 
 @pytest.fixture
 def glm_dataloader(glm_data_file):
-    return GlmDataLoader(glm_data_file, tokenizer, 64)
+    return GlmDataLoader(glm_data_file, _glm_tokenizer, 64)
 
 
 @pytest.fixture
@@ -39,13 +55,9 @@ def glm_tune_param():
     return params
 
 @pytest.fixture
-def mocked_dataset():
-    """
-    {"prompt": "你好你好你好", "completion": "是谁"},
-    {"prompt": "你好", "completion": "谁"},
-    """
+def mocked_data():
     data = [
-        DataItem([5, 94874, 94874, 94874, 130001, 130004, 5, 88443, 130005], 6),
-        DataItem([5, 94874, 130001, 130004, 5, 84480, 130005], 4),
+        {"prompt": "你好你好你好", "completion": "是谁"},
+        {"prompt": "你好", "completion": "谁"}
     ]
     return data

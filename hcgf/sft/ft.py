@@ -12,6 +12,7 @@ from torch.distributed.fsdp import (
 
 from transformers import AutoTokenizer, AutoModel
 from transformers.modeling_utils import PreTrainedModel
+from transformers.tokenization_utils import PreTrainedTokenizer
 from transformers.generation.utils import (
     LogitsProcessorList,
     StoppingCriteriaList,
@@ -30,7 +31,10 @@ from ..trainer.fsdp import (
     get_sharding_strategy,
     get_mp_policy, 
 )
-from ..utils import print_trainable_parameters, create_token_tensor_list, get_model_name_from
+from ..utils import (
+    print_layer_info, print_trainable_parameters, 
+    create_token_tensor_list, get_model_name_from
+)
 
 
 class InvalidScoreLogitsProcessor(LogitsProcessor):
@@ -110,7 +114,7 @@ class GlmLora:
         
         print(f"You are in {self.mode} mode")
         print(f"Loading tokenizer {model_id}")
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+        self.tokenizer = self.load_tokenizer()
         self.lora_config = LoraConfigLoader(
             lora_r, lora_alpha, lora_dropout
         ).get_config(self.model_name)
@@ -122,7 +126,7 @@ class GlmLora:
         self.builtin_stop_tensor_list = create_token_tensor_list(
             self.tokenizer, self.stop_tokens
         )
-
+    
     def __cast_small_to(self, dtype: torch.Type):
         for name, param in self.model.named_parameters():
             if param.ndim == 1 and param.dtype != dtype:
@@ -133,14 +137,42 @@ class GlmLora:
             if "lora_" in name:
                 param.data = param.data.to(dtype)
     
+    def load_tokenizer(self) -> PreTrainedTokenizer:
+        if self.model_name == "llama":
+            from transformers import LlamaTokenizer
+            tk = LlamaTokenizer.from_pretrained(self.model_id)
+            tk.pad_token_id = (
+                0  # unk. we want this to be different from the eos token
+            )
+            tk.padding_side = "left"
+        else:
+            tk = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+        tk.max_model_input_len = self.max_input_length
+        tk.model_name = self.model_name
+        return tk
+    
     def load_model(self, model_id: str) -> PreTrainedModel:
         if self.load_in_8bit:
             device_map = "auto"
         else:
             device_map = None
-        model = AutoModel.from_pretrained(
-            model_id, load_in_8bit=self.load_in_8bit, device_map=device_map, trust_remote_code=True
+        if self.model_name == "llama":
+            from transformers import LlamaForCausalLM
+            ModelCls = LlamaForCausalLM
+            trust_remote_code = False
+        else:
+            ModelCls = AutoModel
+            trust_remote_code = True
+        model = ModelCls.from_pretrained(
+            model_id, 
+            load_in_8bit=self.load_in_8bit,
+            # 大模型half
+            torch_dtype=torch.float16,
+            device_map=device_map,
+            trust_remote_code=trust_remote_code,
         )
+        # if not self.load_in_8bit:
+        #     model.half()
         if self.device:
             model.to(self.device)
         return model
@@ -178,6 +210,7 @@ class GlmLora:
                 "accumulate_steps": None,
                 "out_dir": "./output/",
                 "print_every": None,
+                "pretrained_ckpt": None,
             }
             for key in default:
                 if key not in params:
@@ -187,7 +220,8 @@ class GlmLora:
         args = MagicDict(params)
         strategy = args.get("strategy", "fsdp_zero3")
         if not self.model_is_setup:
-            self.model = self.load_model(self.model_id).half()
+            self.model = self.load_model(self.model_id)
+            # NOTE: ChatGLM use mixed float, FSDP needs all parameters in a shard to be the same
             setup(rank, world_size)
             train_loader, val_loader = self.dataloader.train_dev_split(args.batch_size, True, rank)
             auto_wrap_policy = get_transformer_wrap_policy(self.model, self.transformer_block)
@@ -196,6 +230,8 @@ class GlmLora:
             torch.cuda.set_device(rank)
             if rank == 0:
                 print(f"Processing Lora Model in {self.mode} mode...")
+                print(f"mp policy: {mp_policy}")
+            # NOTE: There are still issues for cpuoffload: https://github.com/pytorch/pytorch/issues/91165
             self.model = FSDP(
                 LoraModel(self.model, self.lora_config),
                 auto_wrap_policy=auto_wrap_policy,
@@ -203,8 +239,14 @@ class GlmLora:
                 cpu_offload=CPUOffload(offload_params=True),
                 mixed_precision=mp_policy,
                 device_id=torch.cuda.current_device(),
+                # limit_all_gathers=True,
             )
+            if args.pretrained_ckpt is not None:
+                static = torch.load(args.pretrained_ckpt)
+                self.model.load_state_dict(static, strict=False)
+            self.model.config.use_cache = False
             if rank == 0:
+                # print_layer_info(self.model)
                 print_trainable_parameters(self.model)
             self.model_is_setup = True
         
@@ -246,6 +288,7 @@ class GlmLora:
             self.model = self.load_model(self.model_id)
             print(f"Processing Lora Model in {self.mode} mode...")
             self.model = LoraModel(self.model, self.lora_config)
+            # print_layer_info(self.model)
             print_trainable_parameters(self.model)
             self.model_is_setup = True
         
@@ -281,7 +324,7 @@ class GlmLora:
             self.__cast_lora_to(torch.float32)
         self.model.lora_config.inference_mode = True
         self.model.config.use_cache = True
-        if quant_bit is not None:
+        if quant_bit is not None and hasattr(self.model, "quantize"):
             self.model.quantize(quant_bit)
         # 8bit do not use device, device is None
         if self.device is not None:
@@ -298,7 +341,7 @@ class GlmLora:
         if self.model_name == "chatglm":
             return "GLMBlock"
         elif self.model_name == "llama":
-            return ""
+            return "LlamaAttention"
     
     def get_generate_config(
         self,

@@ -137,7 +137,7 @@ gl.load_pretrained("/path/to/lora_pt").load_data("/path/to/new_data.json").tune(
 ```python
 load_data(
     data_path: str, 
-    max_seq_len: int = 512, # 句子最大长度，超过会截断
+    max_seq_len: int = 512, # 句子最大长度，超过会截断。注意，这里指Prompt或Completion的长度，应保证两者长度之和不大于模型最大长度。
 )
 tune(
     batch_size: int = 8,

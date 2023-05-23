@@ -2,7 +2,7 @@ from typing import List
 import torch
 
 
-from ..data_model import DataItem, GlmBatchInput
+from ..data_model import DataItem, GlmBatchInput, LlamaBatchInput
 
 
 class GlmDataCollector:
@@ -117,6 +117,46 @@ class GlmDataCollector:
         return {
             "input_ids": input_ids,
             "position_ids": position_ids,
+            "attention_mask": attention_mask,
+            "labels": labels,
+        }
+
+
+class LlamaDataCollector:
+    
+    @classmethod
+    def collate_fn(
+        cls,
+        data_items: List[DataItem],
+    ) -> LlamaBatchInput:
+        pad_to_multiple_of = 8
+        len_ids = [len(v.input_ids) for v in data_items]
+        longest_seq_len = max(len_ids)
+        if longest_seq_len % pad_to_multiple_of != 0:
+            longest_seq_len = ((longest_seq_len // pad_to_multiple_of) + 1) * pad_to_multiple_of
+        id_list = []
+        mask_list = []
+        label_list = []
+        for seq_len, item in sorted(
+                zip(len_ids, data_items), key=lambda x: -x[0]):
+            ids = item.input_ids
+            cxt_len = item.cxt_len
+
+            padding_len = longest_seq_len - seq_len
+            _labels = [-100] * (padding_len + cxt_len) + ids[cxt_len:]
+            # _labels = [-100] * (padding_len) + ids
+            # pad_id: 0
+            _ids = [0] * padding_len + ids
+            _masks = [0] * padding_len + [1] * len(ids)
+
+            id_list.append(torch.LongTensor(_ids))
+            mask_list.append(torch.BoolTensor(_masks))
+            label_list.append(torch.LongTensor(_labels))
+        input_ids = torch.stack(id_list)
+        attention_mask = torch.stack(mask_list)
+        labels = torch.stack(label_list)
+        return {
+            "input_ids": input_ids,
             "attention_mask": attention_mask,
             "labels": labels,
         }

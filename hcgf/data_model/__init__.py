@@ -13,6 +13,7 @@ DType = TypeVar("DType", torch.IntType, torch.FloatType)
 class Tensor(torch.Tensor, Generic[Shape, DType]):
     ...
 
+
 Batch = NewType("Batch", int)
 SeqLen = NewType("SeqLen", int)
 Hidden = NewType("Hidden", int)
@@ -26,6 +27,14 @@ GlmBatchInput = TypedDict(
     attention_mask=Optional[Annotated[torch.BoolTensor, Tuple[Batch, ND, SeqLen, SeqLen]]],
     labels=Annotated[torch.LongTensor, Tuple[Batch, SeqLen]],
 )
+
+LlamaBatchInput = TypedDict(
+    "LlamaBatchInput",
+    input_ids=Annotated[torch.LongTensor, Tuple[Batch, SeqLen]],
+    attention_mask=Optional[Annotated[torch.BoolTensor, Tuple[Batch, SeqLen]]],
+    labels=Annotated[torch.LongTensor, Tuple[Batch, SeqLen]],
+)
+
 
 
 @dataclass

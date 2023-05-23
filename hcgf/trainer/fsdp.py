@@ -21,6 +21,7 @@ from torch.distributed.fsdp import (
     ShardingStrategy,
 )
 from torch.distributed.fsdp.wrap import (
+    size_based_auto_wrap_policy,
     transformer_auto_wrap_policy,
     lambda_auto_wrap_policy,
     _or_policy,
@@ -83,6 +84,8 @@ def get_transformer_wrap_policy(model: nn.Module, module_name: str) -> Callable:
         if (
             len(list(module.named_children())) == 0
             and getattr(module, "weight", None) is not None
+            # make the module as big as possible, but not too big
+            # and (module.weight.requires_grad or module.weight.shape.numel() > 10000000)
             and module.weight.requires_grad
         ):
             return True
@@ -97,8 +100,12 @@ def get_transformer_wrap_policy(model: nn.Module, module_name: str) -> Callable:
     tf_wrap_policy = functools.partial(
         transformer_auto_wrap_policy, transformer_layer_cls=transformer_cls_to_wrap
     )
+
+    sized_wrap_policy = functools.partial(
+        size_based_auto_wrap_policy, min_num_params=1e8
+    )
     auto_wrap_policy = functools.partial(
-        _or_policy, policies=[lambda_policy, tf_wrap_policy]
+        _or_policy, policies=[lambda_policy, sized_wrap_policy]
     )
     return auto_wrap_policy
 

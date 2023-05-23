@@ -118,6 +118,6 @@ def get_model_name_from(model_id: str) -> str:
     elif "llama" in model_id:
         return "llama"
     else:
-        msg = f"Unsupported model: {model_id}, only support chatglm and llama. "
+        msg = f"Unsupported model: {model_id}, only support chatglm or llama. "
         msg += "Your input must contain either of them"
         raise ValueError(msg)
