@@ -37,7 +37,7 @@ hcgf_tune -h
 hcgf_tune --model THUDM/chatglm-6b --data_path path/to/train_data.json
 ```
 
-首先要理解一下，模型训练时，除了模型（也就是参数）占用的空间外，还有
+首先要理解一下，模型训练时，除了模型（也就是参数）占用的空间外，还有优化器、梯度等会占用显存。
 
 
 一共五种策略：
@@ -132,7 +132,7 @@ gl.load_pretrained("/path/to/lora_pt").load_data("/path/to/new_data.json").tune(
 
 ### 参数说明
 
-主要有三个方法的参数，有值的表示默认值。
+主要方法参数，有值的表示默认值。
 
 ```python
 load_data(
@@ -148,6 +148,16 @@ tune(
     out_dir: str = "./output/",
     print_every: Optional[int] = None,      # 为None时每1/10Epoch个Steps打印一次输出（Step、Loss、LearningRate）
 )
+# 未说明参数含义同`chat`
+generate(
+    sents: Union[str, List[str]],           # 输入的句子，可以是str或列表（多个输入），**注意**需要根据训练样本格式构造好输入。
+    do_sample: bool = True,
+    num_beams: int = 1,
+    temperature: float = 0.2,
+    top_p: float = 0.7,
+    repetition_penalty: float = 1.02,
+)
+# ChatGLM only
 chat(
     inp: str, 
     history: List[Tuple[str, str]] = None,  # (问，答)Pair对
@@ -164,7 +174,7 @@ chat(
 Best Practice:
 
 - `tune`: 如果内存不够可以调小batch_size，同时增加accumulate_steps，一般是batch_size的整数倍；
-- `chat`: 一般只需调整`temerature`；
+- `chat/generate`: 一般只需调整`temerature`；
 
 
 ### 配置
@@ -242,6 +252,8 @@ GlmLora("/path/to/huggingface/models--THUDM--chatglm-6b/snapshots/<id>/")
 
 ## 更新日志
 
+- **v0.3.0** `20230526`
+  - 支持LLaMA（包括Native、Alpaca、Ziya等）
 - **v0.2.0** `20230513`
   - 支持分布式微调
   - 调整推理模式，支持Batch

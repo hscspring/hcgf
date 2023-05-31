@@ -1,12 +1,15 @@
 """
 Modified From peft v0.2.0
 """
+from typing import Optional
 import re
 
+import torch
 import torch.nn as nn
 from transformers.pytorch_utils import Conv1D
 
 from .lora_layer import Linear, MergedLinear
+from .lora_config import LoraConfig
 
 
 def mark_only_lora_as_trainable(model: nn.Module, bias: str = "none") -> None:
@@ -28,11 +31,14 @@ def mark_only_lora_as_trainable(model: nn.Module, bias: str = "none") -> None:
 
 
 class LoraModel(nn.Module):
-    def __init__(self, model, config):
+    def __init__(self, model: nn.Module, config: LoraConfig, ckpt_path: Optional[str]):
         super().__init__()
         self.lora_config = config
         self.model = model
         self._find_and_replace()
+        if ckpt_path is not None:
+            static = torch.load(ckpt_path)
+            self.model.load_state_dict(static, strict=False)
         mark_only_lora_as_trainable(self.model, self.lora_config.bias)
         self.forward = self.model.forward
 

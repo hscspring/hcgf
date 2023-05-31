@@ -1,5 +1,5 @@
 from dataclasses import dataclass, asdict
-
+from enum import Enum
 from typing import NewType, Tuple, TypedDict, Optional, List, TypeVar, Generic
 from typing_extensions import Annotated
 
@@ -45,3 +45,11 @@ class DataItem:
 
     def to_dict(self):
         return asdict(self)
+
+
+class LlmType(Enum):
+    
+    chatglm = "chatglm"
+    llama_native = "llama"
+    llama_alpaca = "llama"
+    llama_ziya = "llama"

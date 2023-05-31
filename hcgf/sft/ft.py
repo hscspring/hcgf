@@ -33,7 +33,7 @@ from ..trainer.fsdp import (
 )
 from ..utils import (
     print_layer_info, print_trainable_parameters, 
-    create_token_tensor_list, get_model_name_from
+    create_token_tensor_list, get_model_type_from
 )
 
 
@@ -91,7 +91,7 @@ class GlmLora:
     ):
         world_size = torch.cuda.device_count()
         self.model_id = model_id
-        self.model_name = get_model_name_from(model_id)
+        self.llm_type = get_model_type_from(model_id)
 
         self.load_in_8bit = False
         self.device = None
@@ -117,7 +117,7 @@ class GlmLora:
         self.tokenizer = self.load_tokenizer()
         self.lora_config = LoraConfigLoader(
             lora_r, lora_alpha, lora_dropout
-        ).get_config(self.model_name)
+        ).get_config(self.llm_type.value)
         self.model_is_setup = False
 
         self.dataloader = None
@@ -127,18 +127,18 @@ class GlmLora:
             self.tokenizer, self.stop_tokens
         )
     
-    def __cast_small_to(self, dtype: torch.Type):
+    def __cast_small_to(self, dtype: torch.Type) -> None:
         for name, param in self.model.named_parameters():
             if param.ndim == 1 and param.dtype != dtype:
                 param.data = param.data.to(dtype)
 
-    def __cast_lora_to(self, dtype: torch.Type):
+    def __cast_lora_to(self, dtype: torch.Type) -> None:
         for name, param in self.model.named_parameters():
             if "lora_" in name:
                 param.data = param.data.to(dtype)
     
     def load_tokenizer(self) -> PreTrainedTokenizer:
-        if self.model_name == "llama":
+        if self.llm_type.value == "llama":
             from transformers import LlamaTokenizer
             tk = LlamaTokenizer.from_pretrained(self.model_id)
             tk.pad_token_id = (
@@ -148,7 +148,7 @@ class GlmLora:
         else:
             tk = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
         tk.max_model_input_len = self.max_input_length
-        tk.model_name = self.model_name
+        tk.model_name = self.llm_type.value
         return tk
     
     def load_model(self, model_id: str) -> PreTrainedModel:
@@ -156,7 +156,7 @@ class GlmLora:
             device_map = "auto"
         else:
             device_map = None
-        if self.model_name == "llama":
+        if self.llm_type.value == "llama":
             from transformers import LlamaForCausalLM
             ModelCls = LlamaForCausalLM
             trust_remote_code = False
@@ -171,23 +171,26 @@ class GlmLora:
             device_map=device_map,
             trust_remote_code=trust_remote_code,
         )
+        
+        if self.llm_type.value == "llama":
+            model.config.pad_token_id = 0  # unk
+            model.config.bos_token_id = 1
+            model.config.eos_token_id = 2
+        
         # if not self.load_in_8bit:
         #     model.half()
         if self.device:
             model.to(self.device)
         return model
 
-    def load_pretrained(self, pt_path: Optional[str]):
+    def load_pretrained(self, pt_path: Optional[str]) -> "Self":
         if not self.model_is_setup:
             self.model = self.load_model(self.model_id)
-            self.model = LoraModel(self.model, self.lora_config)
+            self.model = LoraModel(self.model, self.lora_config, pt_path)
             self.model_is_setup = True
-        if pt_path is not None:
-            static = torch.load(pt_path)
-            self.model.load_state_dict(static, strict=False)
         return self
 
-    def load_data(self, data_path: str, max_seq_len: int = 512):
+    def load_data(self, data_path: str, max_seq_len: int = 512) -> "Self":
         print(f"Loading data with max_seq_len: {max_seq_len}")
         self.dataloader = GlmDataLoader(data_path, self.tokenizer, max_seq_len)
         return self
@@ -233,7 +236,7 @@ class GlmLora:
                 print(f"mp policy: {mp_policy}")
             # NOTE: There are still issues for cpuoffload: https://github.com/pytorch/pytorch/issues/91165
             self.model = FSDP(
-                LoraModel(self.model, self.lora_config),
+                LoraModel(self.model, self.lora_config, args.pretrained_ckpt),
                 auto_wrap_policy=auto_wrap_policy,
                 sharding_strategy=sharding_strategy,
                 cpu_offload=CPUOffload(offload_params=True),
@@ -241,9 +244,6 @@ class GlmLora:
                 device_id=torch.cuda.current_device(),
                 # limit_all_gathers=True,
             )
-            if args.pretrained_ckpt is not None:
-                static = torch.load(args.pretrained_ckpt)
-                self.model.load_state_dict(static, strict=False)
             self.model.config.use_cache = False
             if rank == 0:
                 # print_layer_info(self.model)
@@ -287,7 +287,7 @@ class GlmLora:
         if not self.model_is_setup:
             self.model = self.load_model(self.model_id)
             print(f"Processing Lora Model in {self.mode} mode...")
-            self.model = LoraModel(self.model, self.lora_config)
+            self.model = LoraModel(self.model, self.lora_config, None)
             # print_layer_info(self.model)
             print_trainable_parameters(self.model)
             self.model_is_setup = True
@@ -338,9 +338,9 @@ class GlmLora:
     
     @property
     def transformer_block(self) -> str:
-        if self.model_name == "chatglm":
+        if self.llm_type.value == "chatglm":
             return "GLMBlock"
-        elif self.model_name == "llama":
+        elif self.llm_type.value == "llama":
             return "LlamaAttention"
     
     def get_generate_config(
@@ -436,6 +436,7 @@ class GlmLora:
         stopping_criteria=None,
         **kwargs
     ):
+        assert self.llm_type.value == "chatglm", "only support `chatglm`"
         # remain some places for special tokens
         prompt_len = self.max_input_length - max_new_tokens - 8
         "From ChatGLM Model"
@@ -475,6 +476,7 @@ class GlmLora:
         repetition_penalty: float = 1.02,
         stop: List[str] = []
     ):
+        assert self.llm_type.value == "chatglm", "only support `chatglm`"
         if not history:
             history = []
 

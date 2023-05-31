@@ -6,7 +6,7 @@ import torch.nn as nn
 from transformers.tokenization_utils import PreTrainedTokenizer
 
 
-from ..data_model import Tensor
+from ..data_model import Tensor, LlmType
 
 
 def print_trainable_parameters(model: nn.Module) -> None:
@@ -111,12 +111,16 @@ def format_metrics_to_gb(item):
     return metric_num
 
 
-def get_model_name_from(model_id: str) -> str:
+def get_model_type_from(model_id: str) -> LlmType:
     model_id = model_id.lower()
     if "chatglm" in model_id:
-        return "chatglm"
+        return LlmType.chatglm
+    elif "llama" in model_id and "ziya" in model_id:
+        return LlmType.llama_ziya
+    elif "llama" in model_id and "alpaca" in model_id:
+        return LlmType.llama_alpaca
     elif "llama" in model_id:
-        return "llama"
+        return LlmType.llama_native
     else:
         msg = f"Unsupported model: {model_id}, only support chatglm or llama. "
         msg += "Your input must contain either of them"
