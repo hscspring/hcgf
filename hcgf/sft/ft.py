@@ -184,7 +184,7 @@ class GlmLora:
         return model
 
     def load_pretrained(self, pt_path: Optional[str]) -> "Self":
-        if not self.model_is_setup:
+        if not self.model_is_setup and pt_path is not None:
             self.model = self.load_model(self.model_id)
             self.model = LoraModel(self.model, self.lora_config, pt_path)
             self.model_is_setup = True
