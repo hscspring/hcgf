@@ -101,11 +101,11 @@ def get_transformer_wrap_policy(model: nn.Module, module_name: str) -> Callable:
         transformer_auto_wrap_policy, transformer_layer_cls=transformer_cls_to_wrap
     )
 
-    sized_wrap_policy = functools.partial(
-        size_based_auto_wrap_policy, min_num_params=1e8
-    )
+    # sized_wrap_policy = functools.partial(
+    #     size_based_auto_wrap_policy, min_num_params=1e8
+    # )
     auto_wrap_policy = functools.partial(
-        _or_policy, policies=[lambda_policy, sized_wrap_policy]
+        _or_policy, policies=[lambda_policy, tf_wrap_policy]
     )
     return auto_wrap_policy
 

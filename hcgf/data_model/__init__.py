@@ -53,3 +53,4 @@ class LlmType(Enum):
     llama_native = "llama"
     llama_alpaca = "llama"
     llama_ziya = "llama"
+    gpt2 = "gpt2"

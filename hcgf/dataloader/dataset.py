@@ -57,6 +57,7 @@ class GlmMapStyleDataset:
             # without `instruction` key, normal ft
             src = prompt
         else:
+            # only `llama` might got instructions now
             # instruction="" or "some instruction"
             src = self.prompter.build_llama_instruction(instruction, prompt)
         tgt = item["completion"]

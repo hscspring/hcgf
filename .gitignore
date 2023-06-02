@@ -1,6 +1,7 @@
 benchmark_data.json
 backup*
 output*/
+nohup.out
 test.ipynb
 .DS_Store
 data/

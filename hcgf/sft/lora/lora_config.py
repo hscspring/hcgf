@@ -44,5 +44,16 @@ class LoraConfigLoader:
             bias="none"
         )
     
+    @property
+    def gpt2(self):
+        return LoraConfig(
+            target_modules=["c_attn"],
+            r=self.lora_r,
+            lora_alpha=self.lora_alpha,
+            lora_dropout=self.lora_dropout,
+            enable_lora=[True, False, True],
+            bias="none"
+        )
+
     def get_config(self, model_name: str) -> LoraConfig:
         return getattr(self, model_name)

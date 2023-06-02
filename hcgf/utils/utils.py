@@ -121,6 +121,8 @@ def get_model_type_from(model_id: str) -> LlmType:
         return LlmType.llama_alpaca
     elif "llama" in model_id:
         return LlmType.llama_native
+    elif "gpt2" in model_id:
+        return LlmType.gpt2
     else:
         msg = f"Unsupported model: {model_id}, only support chatglm or llama. "
         msg += "Your input must contain either of them"

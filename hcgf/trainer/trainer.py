@@ -267,7 +267,8 @@ class Trainer:
             with FSDP.state_dict_type(
                 model, StateDictType.FULL_STATE_DICT, save_policy
             ):
-                cpu_state = get_lora_state_dict(model)
+                # cpu_state = get_lora_state_dict(model)
+                cpu_state = model
         else:
             cpu_state = get_lora_state_dict(model)
         

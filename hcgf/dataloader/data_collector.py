@@ -160,3 +160,6 @@ class LlamaDataCollector:
             "attention_mask": attention_mask,
             "labels": labels,
         }
+
+
+Gpt2DataCollector = LlamaDataCollector

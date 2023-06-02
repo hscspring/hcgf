@@ -145,8 +145,15 @@ class GlmLora:
                 0  # unk. we want this to be different from the eos token
             )
             tk.padding_side = "left"
-        else:
+        elif self.llm_type.value == "gpt2":
+            from transformers import GPT2Tokenizer
+            tk = GPT2Tokenizer.from_pretrained(self.model_id)
+            tk.pad_token_id = 0
+            tk.padding_side = "left"
+        elif self.llm_type.value == "chatglm":
             tk = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+        else:
+            raise NotImplemented
         tk.max_model_input_len = self.max_input_length
         tk.model_name = self.llm_type.value
         return tk
@@ -156,18 +163,30 @@ class GlmLora:
             device_map = "auto"
         else:
             device_map = None
+        
+        trust_remote_code = False
         if self.llm_type.value == "llama":
             from transformers import LlamaForCausalLM
             ModelCls = LlamaForCausalLM
-            trust_remote_code = False
-        else:
+        if self.llm_type.value == "gpt2":
+            from transformers import GPT2LMHeadModel
+            ModelCls = GPT2LMHeadModel
+        elif self.llm_type.value == "chatglm":
             ModelCls = AutoModel
             trust_remote_code = True
+        else:
+            raise NotImplemented
+        
+        # if lora
+        torch_type = torch.float16
+        # else torch.float32
+        torch_type = torch.bfloat16
+        
         model = ModelCls.from_pretrained(
             model_id, 
             load_in_8bit=self.load_in_8bit,
-            # 大模型half
-            torch_dtype=torch.float16,
+            # 大模型lora微调则half
+            torch_dtype=torch_type,
             device_map=device_map,
             trust_remote_code=trust_remote_code,
         )
@@ -224,6 +243,9 @@ class GlmLora:
         strategy = args.get("strategy", "fsdp_zero3")
         if not self.model_is_setup:
             self.model = self.load_model(self.model_id)
+            # self.__cast_small_to(torch.float32)
+            if rank == 0:
+                print_layer_info(self.model)
             # NOTE: ChatGLM use mixed float, FSDP needs all parameters in a shard to be the same
             setup(rank, world_size)
             train_loader, val_loader = self.dataloader.train_dev_split(args.batch_size, True, rank)
@@ -236,7 +258,8 @@ class GlmLora:
                 print(f"mp policy: {mp_policy}")
             # NOTE: There are still issues for cpuoffload: https://github.com/pytorch/pytorch/issues/91165
             self.model = FSDP(
-                LoraModel(self.model, self.lora_config, args.pretrained_ckpt),
+                self.model,
+                # LoraModel(self.model, self.lora_config, args.pretrained_ckpt),
                 auto_wrap_policy=auto_wrap_policy,
                 sharding_strategy=sharding_strategy,
                 cpu_offload=CPUOffload(offload_params=True),
@@ -246,7 +269,7 @@ class GlmLora:
             )
             self.model.config.use_cache = False
             if rank == 0:
-                # print_layer_info(self.model)
+                print_layer_info(self.model)
                 print_trainable_parameters(self.model)
             self.model_is_setup = True
         
@@ -303,7 +326,10 @@ class GlmLora:
         )
         print("Switch to training mode...")
         if self.load_in_8bit:
+            # 8bit时cast，float16不cast？
+            # from https://colab.research.google.com/drive/1jCkpikz0J2o20FBQmYmAGdiKmJGOMo-o?usp=sharing
             self.__cast_small_to(torch.float32)
+        # self.model.gradient_checkpointing_enable()
         self.model.lm_head = CastOutputToFloat(self.model.lm_head)
         self.__cast_lora_to(torch.float32)
         # turn on when infer
@@ -342,6 +368,10 @@ class GlmLora:
             return "GLMBlock"
         elif self.llm_type.value == "llama":
             return "LlamaAttention"
+        elif self.llm_type.value == "gpt2":
+            return "GPT2Block"
+        else:
+            raise NotImplemented
     
     def get_generate_config(
         self,
