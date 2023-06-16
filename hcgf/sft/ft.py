@@ -10,7 +10,7 @@ from torch.distributed.fsdp import (
     CPUOffload
 )
 
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM
 from transformers.modeling_utils import PreTrainedModel
 from transformers.tokenization_utils import PreTrainedTokenizer
 from transformers.generation.utils import (
@@ -78,21 +78,22 @@ class CastOutputToFloat(nn.Sequential):
         return super().forward(x).to(torch.float32)
 
 
-class GlmLora:
+
+
+class GlmBase:
 
     def __init__(
         self,
         model_id: str,
         device: Optional[str] = None,
-        lora_r: int = 8,
-        lora_alpha: int = 32,
-        lora_dropout: float = 0.1,
         load_in_8bit: bool = False,
     ):
         world_size = torch.cuda.device_count()
         self.model_id = model_id
         self.llm_type = get_model_type_from(model_id)
+        print("llm type: ", self.llm_type.value)
 
+        self.torch_type = None
         self.load_in_8bit = False
         self.device = None
         
@@ -115,45 +116,64 @@ class GlmLora:
         print(f"You are in {self.mode} mode")
         print(f"Loading tokenizer {model_id}")
         self.tokenizer = self.load_tokenizer()
-        self.lora_config = LoraConfigLoader(
-            lora_r, lora_alpha, lora_dropout
-        ).get_config(self.llm_type.value)
         self.model_is_setup = False
 
         self.dataloader = None
 
         self.stop_tokens = ["问题："]
-        self.builtin_stop_tensor_list = create_token_tensor_list(
-            self.tokenizer, self.stop_tokens
-        )
+        self.builtin_stop_tensor_list = self._init_stop_tensor_list(self.stop_tokens)
     
-    def __cast_small_to(self, dtype: torch.Type) -> None:
+    def _init_stop_tensor_list(
+        self, token_list: List[str]
+    ) -> List[Tensor["L", torch.LongTensor]]:
+        res = []
+        for tensor in create_token_tensor_list(
+            self.tokenizer, token_list
+        ):
+            if self.llm_type.value == "chatglm":
+                tensor = tensor[1:]
+            res.append(tensor)
+        return res
+    
+    def _cast_small_to(self, dtype: torch.Type) -> None:
         for name, param in self.model.named_parameters():
             if param.ndim == 1 and param.dtype != dtype:
                 param.data = param.data.to(dtype)
+    
+    def _cast_ln_to(self, dtype: torch.Type) -> None:
+        for name, param in self.model.named_parameters():
+            if "bias" not in name and param.ndim == 1 and param.dtype != dtype:
+                param.data = param.data.to(dtype)
 
-    def __cast_lora_to(self, dtype: torch.Type) -> None:
+    def _cast_lora_to(self, dtype: torch.Type) -> None:
         for name, param in self.model.named_parameters():
             if "lora_" in name:
                 param.data = param.data.to(dtype)
     
     def load_tokenizer(self) -> PreTrainedTokenizer:
+        default_pad_id = 0
         if self.llm_type.value == "llama":
             from transformers import LlamaTokenizer
             tk = LlamaTokenizer.from_pretrained(self.model_id)
-            tk.pad_token_id = (
-                0  # unk. we want this to be different from the eos token
-            )
-            tk.padding_side = "left"
         elif self.llm_type.value == "gpt2":
             from transformers import GPT2Tokenizer
             tk = GPT2Tokenizer.from_pretrained(self.model_id)
-            tk.pad_token_id = 0
-            tk.padding_side = "left"
-        elif self.llm_type.value == "chatglm":
+        elif self.llm_type.value in ["chatglm", "bloom"]:
+            tk = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+            default_pad_id = 3
+        elif self.llm_type.value == "pangu":
+            tk = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+            default_pad_id = 6
+            tk.unk_token_id = 0
+            tk.bos_token_id = 9
+            tk.eos_token_id = 9
+        elif self.llm_type.value == "baichuan":
             tk = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
         else:
             raise NotImplemented
+        
+        tk.pad_token_id = default_pad_id
+        tk.padding_side = "left"
         tk.max_model_input_len = self.max_input_length
         tk.model_name = self.llm_type.value
         return tk
@@ -165,49 +185,38 @@ class GlmLora:
             device_map = None
         
         trust_remote_code = False
+
         if self.llm_type.value == "llama":
             from transformers import LlamaForCausalLM
             ModelCls = LlamaForCausalLM
-        if self.llm_type.value == "gpt2":
+        elif self.llm_type.value == "gpt2":
             from transformers import GPT2LMHeadModel
             ModelCls = GPT2LMHeadModel
-        elif self.llm_type.value == "chatglm":
+        elif self.llm_type.value in ["chatglm"]:
             ModelCls = AutoModel
+            trust_remote_code = True
+        elif self.llm_type.value in ["pangu", "baichuan", "bloom"]:
+            ModelCls = AutoModelForCausalLM
             trust_remote_code = True
         else:
             raise NotImplemented
         
-        # if lora
-        torch_type = torch.float16
-        # else torch.float32
-        torch_type = torch.bfloat16
-        
         model = ModelCls.from_pretrained(
             model_id, 
             load_in_8bit=self.load_in_8bit,
-            # 大模型lora微调则half
-            torch_dtype=torch_type,
+            torch_dtype=self.torch_type,
             device_map=device_map,
             trust_remote_code=trust_remote_code,
         )
         
-        if self.llm_type.value == "llama":
-            model.config.pad_token_id = 0  # unk
-            model.config.bos_token_id = 1
-            model.config.eos_token_id = 2
+        model.config.pad_token_id = self.tokenizer.pad_token_id
         
         # if not self.load_in_8bit:
         #     model.half()
         if self.device:
             model.to(self.device)
+        print(f"Model loaded, config: {model.config}")
         return model
-
-    def load_pretrained(self, pt_path: Optional[str]) -> "Self":
-        if not self.model_is_setup and pt_path is not None:
-            self.model = self.load_model(self.model_id)
-            self.model = LoraModel(self.model, self.lora_config, pt_path)
-            self.model_is_setup = True
-        return self
 
     def load_data(self, data_path: str, max_seq_len: int = 512) -> "Self":
         print(f"Loading data with max_seq_len: {max_seq_len}")
@@ -242,36 +251,34 @@ class GlmLora:
         args = MagicDict(params)
         strategy = args.get("strategy", "fsdp_zero3")
         if not self.model_is_setup:
-            self.model = self.load_model(self.model_id)
-            # self.__cast_small_to(torch.float32)
-            if rank == 0:
-                print_layer_info(self.model)
-            # NOTE: ChatGLM use mixed float, FSDP needs all parameters in a shard to be the same
-            setup(rank, world_size)
-            train_loader, val_loader = self.dataloader.train_dev_split(args.batch_size, True, rank)
-            auto_wrap_policy = get_transformer_wrap_policy(self.model, self.transformer_block)
-            sharding_strategy = get_sharding_strategy(strategy)
-            mp_policy = get_mp_policy()
-            torch.cuda.set_device(rank)
-            if rank == 0:
-                print(f"Processing Lora Model in {self.mode} mode...")
-                print(f"mp policy: {mp_policy}")
-            # NOTE: There are still issues for cpuoffload: https://github.com/pytorch/pytorch/issues/91165
-            self.model = FSDP(
-                self.model,
-                # LoraModel(self.model, self.lora_config, args.pretrained_ckpt),
-                auto_wrap_policy=auto_wrap_policy,
-                sharding_strategy=sharding_strategy,
-                cpu_offload=CPUOffload(offload_params=True),
-                mixed_precision=mp_policy,
-                device_id=torch.cuda.current_device(),
-                # limit_all_gathers=True,
-            )
-            self.model.config.use_cache = False
-            if rank == 0:
-                print_layer_info(self.model)
-                print_trainable_parameters(self.model)
-            self.model_is_setup = True
+            self.load_pretrained()
+        
+        if args.task_type == "lora":
+            self._cast_lora_to(torch.float32)
+        self.model.config.use_cache = False
+
+        # NOTE: ChatGLM use mixed float, FSDP needs all parameters in a shard to be the same
+        setup(rank, world_size)
+        train_loader, val_loader = self.dataloader.train_dev_split(args.batch_size, True, rank)
+        auto_wrap_policy = get_transformer_wrap_policy(self.model, self.transformer_block)
+        sharding_strategy = get_sharding_strategy(strategy)
+        mp_policy = get_mp_policy()
+        torch.cuda.set_device(rank)
+        if rank == 0:
+            print(f"mp policy: {mp_policy}")
+        # NOTE: There are still issues for cpuoffload: https://github.com/pytorch/pytorch/issues/91165
+        self.model = FSDP(
+            self.model,
+            auto_wrap_policy=auto_wrap_policy,
+            sharding_strategy=sharding_strategy,
+            cpu_offload=CPUOffload(offload_params=True),
+            mixed_precision=mp_policy,
+            device_id=torch.cuda.current_device(),
+            # limit_all_gathers=True,
+        )
+        if rank == 0:
+            print_layer_info(self.model)
+            print_trainable_parameters(self.model)
         
         trainer = Trainer(
             lr=args.lr,
@@ -281,9 +288,10 @@ class GlmLora:
             out_dir=args.out_dir,
             device=None,
             print_every=args.print_every,
+            task_type=args.task_type,
         )
-        self.model.lm_head = CastOutputToFloat(self.model.lm_head)
-        self.__cast_lora_to(torch.float32)
+        if rank == 0:
+            print("Begining tunning")
         trainer.train(self.model, train_loader, val_loader, True, rank)
         dist.barrier()
         cleanup()
@@ -291,12 +299,13 @@ class GlmLora:
     def tune(
         self,
         batch_size: int = 1,
-        lr: float = 2e-4,
+        lr: float = 1e-4,
         num_epochs: int = 3,
         warmup_steps: Optional[int] = None,
         accumulate_steps: Optional[int] = 32,
         out_dir: str = "./output/",
         print_every: Optional[int] = None,
+        task_type: str = "lora",
     ) -> None:
         """
         Note
@@ -306,32 +315,24 @@ class GlmLora:
         """
         assert self.mode in ["8bit", "single_gpu"], "Not suit for FSDP, please specify `load_in_8bit` or `device`"
         assert self.dataloader is not None, "Please `load_data` first"
+        print("Switch to training mode...")
 
         if not self.model_is_setup:
-            self.model = self.load_model(self.model_id)
-            print(f"Processing Lora Model in {self.mode} mode...")
-            self.model = LoraModel(self.model, self.lora_config, None)
-            # print_layer_info(self.model)
-            print_trainable_parameters(self.model)
-            self.model_is_setup = True
+            self.load_pretrained()
         
-        trainer = Trainer(
-            lr,
-            num_epochs,
-            warmup_steps,
-            accumulate_steps,
-            out_dir,
-            device=self.device,
-            print_every=print_every,
-        )
-        print("Switch to training mode...")
         if self.load_in_8bit:
             # 8bit时cast，float16不cast？
             # from https://colab.research.google.com/drive/1jCkpikz0J2o20FBQmYmAGdiKmJGOMo-o?usp=sharing
-            self.__cast_small_to(torch.float32)
+            self._cast_small_to(torch.float32)
+        
+        if task_type == "lora":
+            self._cast_lora_to(torch.float32)
+        
+        print_trainable_parameters(self.model)
+
+        # it depends
         # self.model.gradient_checkpointing_enable()
-        self.model.lm_head = CastOutputToFloat(self.model.lm_head)
-        self.__cast_lora_to(torch.float32)
+
         # turn on when infer
         self.model.config.use_cache = False
         if self.device is not None:
@@ -341,15 +342,31 @@ class GlmLora:
         
         train_dl, dev_dl = self.dataloader.train_dev_split(batch_size)
         print("Begining tunning")
+        trainer = Trainer(
+            lr,
+            num_epochs,
+            warmup_steps,
+            accumulate_steps,
+            out_dir,
+            device=self.device,
+            print_every=print_every,
+            task_type=task_type,
+        )
         trainer.train(self.model, train_dl, dev_dl)
 
     def eval(self, quant_bit: Optional[int] = None):
         print("Switch to inference mode...")
+
+        # use float16 for infer mode
         self.model.half()
+
         if self.load_in_8bit:
-            self.__cast_lora_to(torch.float32)
-        self.model.lora_config.inference_mode = True
+            self._cast_lora_to(torch.float32)
+
+        if hasattr(self.model, "lora_config"):
+            self.model.lora_config.inference_mode = True
         self.model.config.use_cache = True
+
         if quant_bit is not None and hasattr(self.model, "quantize"):
             self.model.quantize(quant_bit)
         # 8bit do not use device, device is None
@@ -367,9 +384,15 @@ class GlmLora:
         if self.llm_type.value == "chatglm":
             return "GLMBlock"
         elif self.llm_type.value == "llama":
-            return "LlamaAttention"
+            return "LlamaDecoderLayer"
         elif self.llm_type.value == "gpt2":
             return "GPT2Block"
+        elif self.llm_type.value == "pangu":
+            return "GPTPanguBlock"
+        elif self.llm_type.value == "bloom":
+            return "BloomBlock"
+        elif self.llm_type.value == "baichuan":
+            return "DecoderLayer"
         else:
             raise NotImplemented
     
@@ -536,3 +559,50 @@ class GlmLora:
         if self.device is None:
             return self.model.device
         return self.device
+
+
+class GlmLora(GlmBase):
+
+    def __init__(
+        self,
+        model_id: str,
+        device: Optional[str] = None,
+        lora_r: int = 8,
+        lora_alpha: int = 32,
+        lora_dropout: float = 0.1,
+        load_in_8bit: bool = False,
+    ):
+        super().__init__(model_id, device, load_in_8bit)
+        self.lora_config = LoraConfigLoader(
+            lora_r, lora_alpha, lora_dropout
+        ).get_config(self.llm_type.value)
+        self.torch_type = torch.float16
+    
+    def load_pretrained(self, pt_path: Optional[str] = None) -> "Self":
+        if not self.model_is_setup:
+            self.model = self.load_model(self.model_id)
+            self.model = LoraModel(self.model, self.lora_config, pt_path)
+            self.model_is_setup = True
+            self.model.lm_head = CastOutputToFloat(self.model.lm_head)
+        return self
+
+
+class GlmSft(GlmBase):
+
+    def __init__(
+        self,
+        model_id: str,
+        device: Optional[str] = None,
+        load_in_8bit: bool = False,
+    ):
+        super().__init__(model_id, device, load_in_8bit)
+        self.torch_type = torch.bfloat16
+    
+    def load_pretrained(self, pt_path: Optional[str] = None) -> "Self":
+        if not self.model_is_setup:
+            self.model = self.load_model(self.model_id)
+            if pt_path is not None:
+                static = torch.load(pt_path)
+                self.model.load_state_dict(static)
+            self.model_is_setup = True
+        return self

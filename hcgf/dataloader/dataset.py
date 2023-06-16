@@ -67,15 +67,27 @@ class GlmMapStyleDataset:
             max_length=self.max_seq_len,
             truncation=True,
             add_special_tokens=True)
+        
+        if (
+            self.tokenizer.model_name == "pangu" and 
+            src_ids[0] == self.tokenizer.bos_token_id
+        ):
+            # remove bos and eos
+            src_ids = src_ids[1:-1]
+        
         tgt_ids = self.tokenizer.encode(
             tgt,
             max_length=self.max_seq_len - 1,
             truncation=True,
             add_special_tokens=False)
+        
         if self.tokenizer.model_name == "llama":
             # remove the first blank ``, 29871
             tgt_ids = tgt_ids[1:]
         # ChatGLM use eop_token_id as eos_token_id.....
-        input_ids = src_ids + tgt_ids + [self.tokenizer.eos_token_id]
+        if isinstance(self.tokenizer.eos_token_id, str):
+            input_ids = src_ids + tgt_ids
+        else:
+            input_ids = src_ids + tgt_ids + [self.tokenizer.eos_token_id]
         cxt_len = len(src_ids)
         return DataItem(input_ids, cxt_len)

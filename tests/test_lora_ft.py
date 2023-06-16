@@ -16,10 +16,10 @@ def run_ft(gl: GlmLora, glm_data_file: str, params: dict):
     .tune(**params))
     gl.eval()
     q = "你是谁？"
-    response, history = gl.chat(q, temperature=0.2)
+    response, history = gl.chat(q, temperature=0.1)
     print(q, response)
     params["out_dir"] = p2
-    print("\n\ntuning again...")
+    print(f"\n\ntuning again with params: {params}")
     gl.tune(**params)
     print("\n\ninference...")
     out_dir = Path(os.path.join(params["out_dir"], "ckpt"))
@@ -28,7 +28,7 @@ def run_ft(gl: GlmLora, glm_data_file: str, params: dict):
         key=lambda x: int(x.stem.split("best-")[-1])
     )[-1]
     gl.load_pretrained(best_ckpt).eval()
-    response, history = gl.chat("你是谁？", temperature=0.2)
+    response, history = gl.chat(q, temperature=0.1)
     print(response)
     assert 1, "should pass"
 

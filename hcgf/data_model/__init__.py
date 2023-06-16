@@ -1,6 +1,6 @@
 from dataclasses import dataclass, asdict
 from enum import Enum
-from typing import NewType, Tuple, TypedDict, Optional, List, TypeVar, Generic
+from typing import NewType, Tuple, TypedDict, Optional, List, TypeVar, Generic, Any
 from typing_extensions import Annotated
 
 import torch
@@ -47,10 +47,23 @@ class DataItem:
         return asdict(self)
 
 
+class LlmValue:
+
+    def __init__(self, value: Any):
+        self.value = value
+
 class LlmType(Enum):
     
-    chatglm = "chatglm"
-    llama_native = "llama"
-    llama_alpaca = "llama"
-    llama_ziya = "llama"
-    gpt2 = "gpt2"
+    chatglm = LlmValue("chatglm")
+    llama_native = LlmValue("llama")
+    llama_alpaca = LlmValue("llama")
+    llama_ziya = LlmValue("llama")
+    llama_belle = LlmValue("llama")
+    gpt2 = LlmValue("gpt2")
+    pangu = LlmValue("pangu")
+    bloom = LlmValue("bloom")
+    baichuan = LlmValue("baichuan")
+
+    @property
+    def val(self):
+        return self.value

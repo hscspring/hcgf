@@ -50,7 +50,7 @@ def glm_tune_param():
         "num_epochs": 1, 
         "warmup_steps": 0, 
         "accumulate_steps": 1, 
-        "print_every": 2, 
+        "print_every": 3, 
     }
     return params
 

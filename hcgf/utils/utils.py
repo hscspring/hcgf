@@ -65,9 +65,7 @@ def create_token_tensor_list(
     for token in tokens:
         tids = tokenizer(
             token, add_special_tokens=False, return_tensors="pt"
-        )["input_ids"].squeeze()[1:]
-        if len(tids) == 0:
-            continue
+        )["input_ids"][0]
         tensor_list.append(tids)
     return tensor_list
 
@@ -114,15 +112,26 @@ def format_metrics_to_gb(item):
 def get_model_type_from(model_id: str) -> LlmType:
     model_id = model_id.lower()
     if "chatglm" in model_id:
-        return LlmType.chatglm
-    elif "llama" in model_id and "ziya" in model_id:
-        return LlmType.llama_ziya
+        return LlmType.chatglm.val
     elif "llama" in model_id and "alpaca" in model_id:
-        return LlmType.llama_alpaca
+        return LlmType.llama_alpaca.val
+    elif "llama" in model_id and "ziya" in model_id:
+        return LlmType.llama_ziya.val
+    elif "llama" in model_id and "belle" in model_id:
+        return LlmType.llama_belle.val
     elif "llama" in model_id:
-        return LlmType.llama_native
+        return LlmType.llama_native.val
     elif "gpt2" in model_id:
-        return LlmType.gpt2
+        return LlmType.gpt2.val
+    elif "pangu" in model_id:
+        return LlmType.pangu.val
+    # after llama
+    elif "belle" in model_id:
+        return LlmType.bloom.val
+    elif "bloomz" in model_id:
+        return LlmType.bloom.val
+    elif "baichuan" in model_id:
+        return LlmType.baichuan.val
     else:
         msg = f"Unsupported model: {model_id}, only support chatglm or llama. "
         msg += "Your input must contain either of them"

@@ -33,8 +33,7 @@ class LoraConfigLoader:
             bias="none"
         )
     
-    @property
-    def llama(self):
+    def get_base_gpt_config(self):
         return LoraConfig(
             target_modules=["q_proj", "v_proj"],
             r=self.lora_r,
@@ -54,6 +53,29 @@ class LoraConfigLoader:
             enable_lora=[True, False, True],
             bias="none"
         )
+    
+    @property
+    def pangu(self):
+        return self.get_base_gpt_config()
+
+    @property
+    def llama(self):
+        return self.get_base_gpt_config()
+    
+    @property
+    def baichuan(self):
+        return LoraConfig(
+            target_modules=["W_pack"],
+            r=self.lora_r,
+            lora_alpha=self.lora_alpha,
+            lora_dropout=self.lora_dropout,
+            enable_lora=[True, False, True],
+            bias="none"
+        )
+
+    @property
+    def bloom(self):
+        return self.chatglm
 
     def get_config(self, model_name: str) -> LoraConfig:
         return getattr(self, model_name)

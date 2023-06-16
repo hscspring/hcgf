@@ -10,7 +10,8 @@ from transformers.tokenization_utils import PreTrainedTokenizer
 from pnlp import Reader
 
 from .dataset import GlmMapStyleDataset
-from .data_collector import GlmDataCollector, LlamaDataCollector, Gpt2DataCollector
+from ..base import Register
+
 
 
 class GlmDataLoader:
@@ -97,15 +98,11 @@ class GlmDataLoader:
         else:
             sampler = None
             dl_shuffle = shuffle
-        
-        if self.tokenizer.model_name == "llama":
-            collate_fn = LlamaDataCollector.collate_fn
-        elif self.tokenizer.model_name == "chatglm":
-            collate_fn = GlmDataCollector.collate_fn
-        elif self.tokenizer.model_name == "gpt2":
-            collate_fn = Gpt2DataCollector.collate_fn
-        else:
-            msg = f"Unsupported data collector: {self.tokenizer.model_name}"
+
+        ins_name = self.tokenizer.model_name
+        cls_ins = Register.get(ins_name, "DataCollector")
+        if not cls_ins:
+            msg = f"Unsupported data collector: {ins_name}"
             raise ValueError(msg)
 
         dataloader = DataLoader(
@@ -113,7 +110,7 @@ class GlmDataLoader:
             batch_size=batch_size,
             shuffle=dl_shuffle,
             sampler=sampler,
-            collate_fn=collate_fn,
+            collate_fn=cls_ins.collate_fn,
             pin_memory=True
         )
         return dataloader

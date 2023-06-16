@@ -6,7 +6,7 @@ import pnlp
 
 from hcgf.dataloader.dataset import GlmMapStyleDataset
 from hcgf.data_model import DataItem
-from hcgf.dataloader.data_collector import GlmDataCollector, LlamaDataCollector
+from hcgf.dataloader.data_collector import ChatglmDataCollector, LlamaDataCollector
 from hcgf.dataloader.preprocessor import Prompter
 
 
@@ -36,6 +36,9 @@ def test_dataset_max_len(glm_tokenizer, max_len, expected):
 
 arr_dtype = np.int64
 
+
+# NOTE: follow ChatGLM GitHub P-Tuning, padding to right, ChatGLM Tokenizer actually uses `padding_left`
+# Here, when we are training, it's not an issue.
 input_ids = np.array(
     [
         [5, 74874, 74874, 74874, 130001, 130004, 5, 68443, 130005],
@@ -95,7 +98,7 @@ attention_mask = np.array(
 ])
 def test_glm_data_collector(mocked_data, glm_tokenizer, inp_key, shape, expected):
     ds = GlmMapStyleDataset(mocked_data, glm_tokenizer, 32)
-    binp = GlmDataCollector.collate_fn(ds)
+    binp = ChatglmDataCollector.collate_fn(ds)
     assert type(binp) == dict
     val = binp[inp_key]
     assert tuple(val.shape) == shape
@@ -192,7 +195,7 @@ def test_dataset_collector(glm_tokenizer, inp_key, shape):
         {"prompt": "你好", "completion": "谁"},
     ]
     ds = GlmMapStyleDataset(data, glm_tokenizer)
-    binp = GlmDataCollector.collate_fn(ds)
+    binp = ChatglmDataCollector.collate_fn(ds)
     val = binp[inp_key]
     assert tuple(val.shape) == shape
 

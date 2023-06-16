@@ -3,9 +3,11 @@ import torch
 
 
 from ..data_model import DataItem, GlmBatchInput, LlamaBatchInput
+from ..base import Register
 
 
-class GlmDataCollector:
+@Register.regist
+class ChatglmDataCollector:
 
     """
     GLM special tokens:
@@ -104,6 +106,7 @@ class GlmDataCollector:
             _labels = [-100] * (cxt_len - 1) + \
                 ids[(cxt_len - 1):] + [-100] * padding_len
             # pad_id: 3
+            # NOTE: follow ChatGLM GitHub P-Tuning, chatglm_tokenizer is `padding_left` by default
             _ids = ids + [3] * padding_len
 
             id_list.append(torch.LongTensor(_ids))
@@ -121,7 +124,44 @@ class GlmDataCollector:
             "labels": labels,
         }
 
+def general_collate_fn(
+    pad_token_id: int, 
+    data_items: List[DataItem]
+) -> LlamaBatchInput:
+    pad_to_multiple_of = 8
+    len_ids = [len(v.input_ids) for v in data_items]
+    longest_seq_len = max(len_ids)
+    if longest_seq_len % pad_to_multiple_of != 0:
+        longest_seq_len = ((longest_seq_len // pad_to_multiple_of) + 1) * pad_to_multiple_of
+    id_list = []
+    mask_list = []
+    label_list = []
+    for seq_len, item in sorted(
+            zip(len_ids, data_items), key=lambda x: -x[0]):
+        ids = item.input_ids
+        cxt_len = item.cxt_len
 
+        padding_len = longest_seq_len - seq_len
+        special_label_id = -100
+        _labels = [special_label_id] * (padding_len + cxt_len) + ids[cxt_len:]
+        # _labels = [special_label_id] * (padding_len) + ids
+        _ids = [pad_token_id] * padding_len + ids
+        _masks = [0] * padding_len + [1] * len(ids)
+
+        id_list.append(torch.LongTensor(_ids))
+        mask_list.append(torch.BoolTensor(_masks))
+        label_list.append(torch.LongTensor(_labels))
+    input_ids = torch.stack(id_list)
+    attention_mask = torch.stack(mask_list)
+    labels = torch.stack(label_list)
+    return {
+        "input_ids": input_ids,
+        "attention_mask": attention_mask,
+        "labels": labels,
+    }
+
+
+@Register.regist
 class LlamaDataCollector:
     
     @classmethod
@@ -129,37 +169,48 @@ class LlamaDataCollector:
         cls,
         data_items: List[DataItem],
     ) -> LlamaBatchInput:
-        pad_to_multiple_of = 8
-        len_ids = [len(v.input_ids) for v in data_items]
-        longest_seq_len = max(len_ids)
-        if longest_seq_len % pad_to_multiple_of != 0:
-            longest_seq_len = ((longest_seq_len // pad_to_multiple_of) + 1) * pad_to_multiple_of
-        id_list = []
-        mask_list = []
-        label_list = []
-        for seq_len, item in sorted(
-                zip(len_ids, data_items), key=lambda x: -x[0]):
-            ids = item.input_ids
-            cxt_len = item.cxt_len
-
-            padding_len = longest_seq_len - seq_len
-            _labels = [-100] * (padding_len + cxt_len) + ids[cxt_len:]
-            # _labels = [-100] * (padding_len) + ids
-            # pad_id: 0
-            _ids = [0] * padding_len + ids
-            _masks = [0] * padding_len + [1] * len(ids)
-
-            id_list.append(torch.LongTensor(_ids))
-            mask_list.append(torch.BoolTensor(_masks))
-            label_list.append(torch.LongTensor(_labels))
-        input_ids = torch.stack(id_list)
-        attention_mask = torch.stack(mask_list)
-        labels = torch.stack(label_list)
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "labels": labels,
-        }
+        return general_collate_fn(0, data_items)
 
 
-Gpt2DataCollector = LlamaDataCollector
+@Register.regist
+class Gpt2DataCollector:
+    
+    @classmethod
+    def collate_fn(
+        cls,
+        data_items: List[DataItem],
+    ) -> LlamaBatchInput:
+        return general_collate_fn(0, data_items)
+
+
+@Register.regist
+class PanguDataCollector:
+
+    @classmethod
+    def collate_fn(
+        cls,
+        data_items: List[DataItem],
+    ) -> LlamaBatchInput:
+        return general_collate_fn(6, data_items)
+
+
+@Register.regist
+class BaichuanDataCollector:
+
+    @classmethod
+    def collate_fn(
+        cls,
+        data_items: List[DataItem],
+    ) -> LlamaBatchInput:
+        return general_collate_fn(0, data_items)
+
+
+@Register.regist
+class BloomDataCollector:
+
+    @classmethod
+    def collate_fn(
+        cls,
+        data_items: List[DataItem],
+    ) -> LlamaBatchInput:
+        return general_collate_fn(3, data_items)

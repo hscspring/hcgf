@@ -64,6 +64,7 @@ def test_trainer(lr, num_epochs, warmup_steps, accumulate_steps):
         out_path,
         "cpu",
         10,
+        "lora",
     )
     trainer.train(model, train_loader, train_loader)
     if os.path.exists(out_path):

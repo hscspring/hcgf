@@ -30,6 +30,7 @@ class Trainer:
         out_dir: str,
         device: Optional[str],
         print_every: Optional[int],
+        task_type: str,
     ):
         self.lr = lr
         self.num_epochs = num_epochs
@@ -39,6 +40,7 @@ class Trainer:
         self.device = device
         self.print_every = print_every
         self.max_to_keep = 5
+        self.task_type = task_type
 
     def train(
         self,
@@ -52,7 +54,7 @@ class Trainer:
             self.ckpt_path = os.path.join(self.out_dir, "ckpt")
             pnlp.check_dir(self.out_dir, self.ckpt_path)
             time_of_run = get_date_of_run()
-            self.save_file_prefix = f"lora-{time_of_run}-ckpt-best"
+            self.save_file_prefix = f"{self.task_type}-{time_of_run}-ckpt-best"
             start_time = time.perf_counter()
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.lr)
@@ -116,9 +118,12 @@ class Trainer:
                 print(f"\n\nEpoch {epoch}/{self.num_epochs}")
                 inner_pbar = tqdm.tqdm(
                     range(len(train_dataloader)), colour="blue", 
-                    desc="rank0 Training Epoch"
+                    desc=f"rank0 Training Epoch {epoch}/{self.num_epochs}",
+                    bar_format="{desc:<25}{percentage:3.0f}%|{bar:50}{r_bar}"
                 )
             for step, batch in enumerate(train_dataloader, start=1):
+                if epoch == 1 and rank == 0 and step == 1:
+                    print(f"Batch data example: {batch}")
                 if is_distributed:
                     output = self._fsdp_step(model, batch, rank)
                 else:
@@ -126,7 +131,7 @@ class Trainer:
                 
                 # the loss has already been averaged along batch
                 loss_b = output.loss.detach().float()
-                loss = output.loss / accumulate_steps
+                loss = output.loss #/ accumulate_steps
                 loss.backward()
                 if step % accumulate_steps == 0:
                     optimizer.step()
@@ -139,14 +144,16 @@ class Trainer:
                     inner_pbar.update(1)
 
                 if rank == 0 and step % print_every == 0:
-                    msg = f"Step: {step}, "
+                    msg = f" Step: {step}, "
                     msg += f"Loss: {train_loss[0] / step:.4f}, "
                     msg += f"LearningRate: {lr_scheduler.get_last_lr()[0]:.6f} "
                     print(msg)
 
                 if (
                     total_step % valid_steps == 0 and 
-                    valid_steps < batch_num
+                    valid_steps < batch_num and
+                    # valid will happen after one epoch complete
+                    step < batch_num - valid_steps
                 ):
                     val_loss = self.eval(model, dev_dataloader, is_distributed, rank)
                     if val_loss < val_best_loss:
@@ -208,7 +215,8 @@ class Trainer:
             val_loss = torch.zeros(1).to(self.device)
         if rank == 0:
             inner_pbar = tqdm.tqdm(
-                range(len(dataloader)), colour="green", desc="Validation Epoch"
+                range(len(dataloader)), colour="green", desc="Validation Epoch",
+                bar_format="{desc:<25}{percentage:3.0f}%|{bar:50}{r_bar}"
             )
         steps = len(dataloader)
         for step, batch in enumerate(dataloader, start=1):
@@ -252,6 +260,14 @@ class Trainer:
                 output = model(**batch)
         return output
     
+    def _get_static_dict(self, model) -> dict:
+        if self.task_type == "lora":
+            sd = get_lora_state_dict(model)
+        elif self.task_type == "sft":
+            sd = model.state_dict()
+        return sd
+
+    
     def _save(
         self,
         model, 
@@ -267,10 +283,10 @@ class Trainer:
             with FSDP.state_dict_type(
                 model, StateDictType.FULL_STATE_DICT, save_policy
             ):
-                # cpu_state = get_lora_state_dict(model)
-                cpu_state = model
+                cpu_state = self._get_static_dict(model)
+                
         else:
-            cpu_state = get_lora_state_dict(model)
+            cpu_state = self._get_static_dict(model)
         
         print(f"saving process: rank {rank}  done w state_dict")
         if rank == 0:
