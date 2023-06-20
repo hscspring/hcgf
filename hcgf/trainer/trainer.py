@@ -175,6 +175,7 @@ class Trainer:
                 if rank == 0 and total_step - last_improve > early_stop_steps:
                     print("Early stop for no improvements...")
                     flag = True
+                    break
 
             if is_distributed:
                 dist.all_reduce(train_loss, op=dist.ReduceOp.AVG)
