@@ -52,7 +52,8 @@ class LoraModel(nn.Module):
             "merge_weights": self.lora_config.merge_weights or self.lora_config.inference_mode,
         }
         key_list = [key for key, _ in self.model.named_modules()]
-        for key in key_list:
+        counts = len(key_list)
+        for _j, key in enumerate(key_list):
             if isinstance(self.lora_config.target_modules, str):
                 target_module_found = re.fullmatch(self.lora_config.target_modules, key)
             else:

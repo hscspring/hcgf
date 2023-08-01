@@ -53,10 +53,10 @@ class Trainer:
         if rank == 0:
             self.ckpt_path = os.path.join(self.out_dir, "ckpt")
             pnlp.check_dir(self.out_dir, self.ckpt_path)
-            time_of_run = get_date_of_run()
-            self.save_file_prefix = f"{self.task_type}-{time_of_run}-ckpt-best"
             start_time = time.perf_counter()
-
+        
+        time_of_run = get_date_of_run()
+        save_file_prefix = f"{self.task_type}-{time_of_run}-ckpt-best"
         optimizer = torch.optim.AdamW(model.parameters(), lr=self.lr)
 
         if self.accumulate_steps is None:
@@ -157,7 +157,8 @@ class Trainer:
                 ):
                     val_loss = self.eval(model, dev_dataloader, is_distributed, rank)
                     if val_loss < val_best_loss:
-                        self._save(model, total_step, is_distributed, rank)
+                        out_file_name = f"{save_file_prefix}-{val_loss:0.4f}-{total_step}.pt"
+                        self._save(model, out_file_name, is_distributed, rank)
                         val_best_loss = val_loss
                         last_improve = total_step
 
@@ -184,7 +185,8 @@ class Trainer:
             
             val_loss = self.eval(model, dev_dataloader, is_distributed, rank)
             if val_loss < val_best_loss:
-                self._save(model, total_step, is_distributed, rank)
+                out_file_name = f"{save_file_prefix}-{val_loss:0.4f}-{total_step}.pt"
+                self._save(model, out_file_name, is_distributed, rank)
                 val_best_loss = val_loss
                 last_improve = total_step
             
@@ -272,7 +274,7 @@ class Trainer:
     def _save(
         self,
         model, 
-        total_step: int,
+        out_file_name: str,
         is_distributed: bool, 
         rank: int
     ) -> None:
@@ -291,7 +293,6 @@ class Trainer:
         
         print(f"saving process: rank {rank}  done w state_dict")
         if rank == 0:
-            out_file_name = f"{self.save_file_prefix}-{total_step}.pt"
             out_file_path = os.path.join(self.ckpt_path, out_file_name)
             print(f"--> saving as model name {out_file_name}")
             torch.save(cpu_state, out_file_path)

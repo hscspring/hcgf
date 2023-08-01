@@ -60,8 +60,11 @@ class GlmDataLoader:
         batch_size: int,
         is_distributed: bool = False,
         rank: Optional[int] = None,
+        train_include_dev: bool = False,
     ) -> Tuple[DataLoader, DataLoader]:
         train, dev = self._split(self.data, test_size=0.1)
+        if train_include_dev:
+            train = train + dev
         train_dataset = GlmMapStyleDataset(train, self.tokenizer, self.max_seq_len)
         dev_dataset = GlmMapStyleDataset(dev, self.tokenizer, self.max_seq_len)
         # shuffle

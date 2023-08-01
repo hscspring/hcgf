@@ -155,6 +155,8 @@ class GlmBase:
         if self.llm_type.value == "llama":
             from transformers import LlamaTokenizer
             tk = LlamaTokenizer.from_pretrained(self.model_id)
+            tk.bos_token_id = 1
+            tk.eos_token_id = 2
         elif self.llm_type.value == "gpt2":
             from transformers import GPT2Tokenizer
             tk = GPT2Tokenizer.from_pretrained(self.model_id)
@@ -259,7 +261,9 @@ class GlmBase:
 
         # NOTE: ChatGLM use mixed float, FSDP needs all parameters in a shard to be the same
         setup(rank, world_size)
-        train_loader, val_loader = self.dataloader.train_dev_split(args.batch_size, True, rank)
+        train_loader, val_loader = self.dataloader.train_dev_split(
+            args.batch_size, True, rank, train_include_dev=True
+        )
         auto_wrap_policy = get_transformer_wrap_policy(self.model, self.transformer_block)
         sharding_strategy = get_sharding_strategy(strategy)
         mp_policy = get_mp_policy()
@@ -340,7 +344,7 @@ class GlmBase:
         else:
             self.model.train()
         
-        train_dl, dev_dl = self.dataloader.train_dev_split(batch_size)
+        train_dl, dev_dl = self.dataloader.train_dev_split(batch_size, train_include_dev=True)
         print("Begining tunning")
         trainer = Trainer(
             lr,

@@ -111,7 +111,7 @@ def format_metrics_to_gb(item):
 
 def get_model_type_from(model_id: str) -> LlmType:
     model_id = model_id.lower()
-    if "chatglm" in model_id:
+    if "chatglm" in model_id or "chatglm2" in model_id:
         return LlmType.chatglm.val
     elif "llama" in model_id and "alpaca" in model_id:
         return LlmType.llama_alpaca.val
