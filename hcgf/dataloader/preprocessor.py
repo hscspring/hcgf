@@ -17,13 +17,7 @@ class Prompter:
         prompt: str, 
         max_seq_len: int
     ) -> str:
-        if instruction is None:
-            keep = self.remain_len
-        elif instruction == "":
-            keep = 35 + self.remain_len
-        else:
-            keep = 49 + self.remain_len
-        
+        keep = self.remain_len
         assert max_seq_len > keep, f"max_seq_len: {max_seq_len} must be greater than keep: {keep}"
         max_seq_len -= keep
         if instruction:
@@ -33,8 +27,16 @@ class Prompter:
         pids = tokenizer.encode(prompt, add_special_tokens=False)
         if len(iids + pids) > max_seq_len:
             pmax_len = max_seq_len - len(iids)
+            # Drop first tokens
             prompt = tokenizer.decode(pids[-pmax_len:])
         return prompt
+    
+    def build_input(self, instruction: str, prompt: str) -> str:
+        # General method, like InstructGPT
+        inp = f"""{instruction}
+
+{prompt}
+"""
     
     def build_llama_instruction(self, instruction: str, prompt: str) -> str:
         if not instruction:

@@ -210,7 +210,7 @@ def test_prompter(instruction):
 
 
 @pytest.mark.parametrize("instruction", [None, "", "请说话"])  # 2tokens
-@pytest.mark.parametrize("max_seq_len", [60, 128])  # 最少49+8=57
+@pytest.mark.parametrize("max_seq_len", [11, 128])  # 最少(keep)8
 def test_process_prompt(instruction, max_seq_len, glm_tokenizer):
     prompter = Prompter()
     prompt = "你叫什么名字" # 3tokens
@@ -219,4 +219,4 @@ def test_process_prompt(instruction, max_seq_len, glm_tokenizer):
     if max_seq_len == 128 or not instruction:
         assert new == prompt
     else:
-        assert new == "名字" # prompt只能保留1个tokens（57+2+1=60），所以为`名字`
+        assert new == "名字" # prompt只能保留1个tokens（8keep+2instruction+1prompt=11），所以为`名字`

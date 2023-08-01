@@ -50,16 +50,16 @@ class GlmMapStyleDataset:
     def __getitem__(self, index: int) -> DataItem:
         item = self.data[index]
         instruction = item.get("instruction")
+
+        # cutoff those tokens more than `max_seq_len`
         prompt = self.prompter.process_prompt(
             self.tokenizer, instruction, item["prompt"], self.max_seq_len)
 
         if instruction is None:
-            # without `instruction` key, normal ft
             src = prompt
         else:
-            # only `llama` might got instructions now
-            # instruction="" or "some instruction"
-            src = self.prompter.build_llama_instruction(instruction, prompt)
+            src = self.prompter.build_input(instruction, prompt)
+        
         tgt = item["completion"]
         
         src_ids = self.tokenizer.encode(
