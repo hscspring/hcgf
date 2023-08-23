@@ -46,45 +46,52 @@ class GlmMapStyleDataset:
             msg = f"The given data with `instruction` key, the instruction is: {instruction}"
             msg += "we are in instruction (instruction + prompt + completion) fine-tune mode"
             print(msg)
+        history = []
+        prompt = item["prompt"]
+        src = self.prompter.build_input(instruction, history, prompt, self.tokenizer.model_alias)
+        print("样本 prompt ==> \n", src)
 
     def __getitem__(self, index: int) -> DataItem:
         item = self.data[index]
+        prompt = item.get("prompt")
         instruction = item.get("instruction")
+        history = item.get("history", [])
+        completion = item["completion"]
 
         # cutoff those tokens more than `max_seq_len`
-        prompt = self.prompter.process_prompt(
-            self.tokenizer, instruction, item["prompt"], self.max_seq_len)
+        prompt, history = self.prompter.process_prompt(
+            self.tokenizer, instruction, history, prompt, completion, self.max_seq_len)
 
-        if instruction is None:
-            src = prompt
-        else:
-            src = self.prompter.build_input(instruction, prompt)
-        
-        tgt = item["completion"]
-        
+        src = self.prompter.build_input(
+            instruction, history, prompt, self.tokenizer.model_alias
+        )
         src_ids = self.tokenizer.encode(
-            src,
+            src, 
             max_length=self.max_seq_len,
             truncation=True,
-            add_special_tokens=True)
+            add_special_tokens=True
+        )
         
         if (
             self.tokenizer.model_name == "pangu" and 
             src_ids[0] == self.tokenizer.bos_token_id
         ):
+            # pangu might need modify => re_han_default = re.compile("([\u4E00-\u9FD5a-zA-Z0-9+#&\._%\-<>]+)", re.U)
             # remove bos and eos
             src_ids = src_ids[1:-1]
         
         tgt_ids = self.tokenizer.encode(
-            tgt,
+            completion, 
             max_length=self.max_seq_len - 1,
             truncation=True,
-            add_special_tokens=False)
+            add_special_tokens=False
+        )
         
         if self.tokenizer.model_name == "llama":
             # remove the first blank ``, 29871
             tgt_ids = tgt_ids[1:]
         # ChatGLM use eop_token_id as eos_token_id.....
+        # for pangu, whose eos/pad tokens are string....
         if isinstance(self.tokenizer.eos_token_id, str):
             input_ids = src_ids + tgt_ids
         else:

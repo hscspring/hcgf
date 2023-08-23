@@ -33,6 +33,17 @@ class LoraConfigLoader:
             bias="none"
         )
     
+    @property
+    def qwen(self):
+        return LoraConfig(
+            target_modules=["c_attn"],
+            r=self.lora_r,
+            lora_alpha=self.lora_alpha,
+            lora_dropout=self.lora_dropout,
+            enable_lora=[True, False, True],
+            bias="none"
+        )
+    
     def get_base_gpt_config(self):
         return LoraConfig(
             target_modules=["q_proj", "v_proj"],

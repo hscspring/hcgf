@@ -1,4 +1,5 @@
 benchmark_data.json
+dsc/
 backup*
 output*/
 nohup.out

@@ -58,6 +58,14 @@ def main():
         "--out_dir", type=str, default="./output/", metavar="PATH",
         help="[training] model output path (default: `./output/`)"
     )
+    parser.add_argument(
+        "--adam_betas", type=float, nargs="*", default=[0.9, 0.95], metavar="Beta",
+        help="[training] Adam beta parameters (default: 0.9 0.95)"
+    )
+    parser.add_argument(
+        "--weight_decay", type=float, default=0.01, metavar="L2",
+        help="[training] weight decay to use (default: 0.01)"
+    )
     
     parser_sft = subparsers.add_parser("sft", help="sft fine-tuning")
     parser_sft.set_defaults(task_type="sft")
@@ -73,7 +81,12 @@ def main():
     print(f"Training with args: {args}")
     assert args.task_type in ["sft", "lora"], "must provide a task_type like `sft` or `lora`"
 
-    param_list = ["batch_size", "lr", "num_epochs", "warmup_steps", "accumulate_steps", "out_dir", "task_type"]
+    param_list = [
+        "batch_size", "lr", "num_epochs", 
+        "warmup_steps", "accumulate_steps", "out_dir", 
+        "task_type",
+        "adam_betas", "weight_decay",
+    ]
     params = {key: getattr(args, key) for key in param_list}
 
     if args.strategy in ["fsdp_zero3", "fsdp_zero2", "mpdp"]:

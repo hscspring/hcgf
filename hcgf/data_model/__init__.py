@@ -49,16 +49,33 @@ class DataItem:
 
 class LlmValue:
 
-    def __init__(self, value: Any):
+    def __init__(
+        self, 
+        value: str,
+    ):
         self.value = value
+        self._alias = None
+    
+    @property
+    def alias(self):
+        if self._alias is None:
+            return self.value
+        return self._alias
+    
+    @alias.setter
+    def alias(self, alias):
+        self._alias = alias
+
 
 class LlmType(Enum):
     
+    qwen = LlmValue("qwen")
     chatglm = LlmValue("chatglm")
     llama_native = LlmValue("llama")
     llama_alpaca = LlmValue("llama")
     llama_ziya = LlmValue("llama")
     llama_belle = LlmValue("llama")
+    llama_linly = LlmValue("llama")
     gpt2 = LlmValue("gpt2")
     pangu = LlmValue("pangu")
     bloom = LlmValue("bloom")

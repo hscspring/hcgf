@@ -144,7 +144,7 @@ def general_collate_fn(
         padding_len = longest_seq_len - seq_len
         special_label_id = -100
         _labels = [special_label_id] * (padding_len + cxt_len) + ids[cxt_len:]
-        # _labels = [special_label_id] * (padding_len) + ids
+        # _labels = [special_label_id] * padding_len + ids
         _ids = [pad_token_id] * padding_len + ids
         _masks = [0] * padding_len + [1] * len(ids)
 
@@ -214,3 +214,14 @@ class BloomDataCollector:
         data_items: List[DataItem],
     ) -> LlamaBatchInput:
         return general_collate_fn(3, data_items)
+
+
+@Register.regist
+class QwenDataCollector:
+
+    @classmethod
+    def collate_fn(
+        cls,
+        data_items: List[DataItem],
+    ) -> LlamaBatchInput:
+        return general_collate_fn(151643, data_items)

@@ -1,7 +1,7 @@
 import time
-import os
+import os, math
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, Tuple
 
 import tqdm
 import torch
@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from transformers import get_linear_schedule_with_warmup
 import pnlp
 
-from ..utils import get_lora_state_dict, get_date_of_run
+from ..utils import get_lora_state_dict, get_date_of_run, get_optim_parameters
 
 
 class Trainer:
@@ -31,6 +31,8 @@ class Trainer:
         device: Optional[str],
         print_every: Optional[int],
         task_type: str,
+        adam_betas: Optional[Tuple[float, float]],
+        weight_decay: Optional[float],
     ):
         self.lr = lr
         self.num_epochs = num_epochs
@@ -41,6 +43,12 @@ class Trainer:
         self.print_every = print_every
         self.max_to_keep = 5
         self.task_type = task_type
+        if adam_betas is None:
+            adam_betas = (0.9, 0.999)
+        self.adam_betas = adam_betas
+        if weight_decay is None:
+            weight_decay = 0.01
+        self.weight_decay = weight_decay
 
     def train(
         self,
@@ -57,7 +65,9 @@ class Trainer:
         
         time_of_run = get_date_of_run()
         save_file_prefix = f"{self.task_type}-{time_of_run}-ckpt-best"
-        optimizer = torch.optim.AdamW(model.parameters(), lr=self.lr)
+
+        optim_params = get_optim_parameters(model, self.weight_decay)
+        optimizer = torch.optim.AdamW(optim_params, lr=self.lr, betas=self.adam_betas)
 
         if self.accumulate_steps is None:
             accumulate_steps = 1
@@ -65,7 +75,7 @@ class Trainer:
             accumulate_steps = self.accumulate_steps
         batch_num = len(train_dataloader)
         epoch_update_steps = batch_num // accumulate_steps
-        total_update_steps = (batch_num * self.num_epochs) // accumulate_steps
+        total_update_steps = math.ceil((batch_num * self.num_epochs) / accumulate_steps)
 
         # use 1/3 epoch to warmup
         if self.warmup_steps is None:
@@ -86,11 +96,11 @@ class Trainer:
         print_every = max(print_every, 1)
 
         if rank == 0:
-            msg = f"Total data batches: {batch_num}, "
+            msg = f"Total data batches == Epoch steps: {batch_num}, "
             msg += f"Accumulate steps: {accumulate_steps}, "
-            msg += f"Epoch update steps (batch_num//accumulate_steps): {epoch_update_steps}, "
+            msg += f"Epoch update times (batch_num//accumulate_steps): {epoch_update_steps}, "
             msg += f"\nEpochs: {self.num_epochs}, "
-            msg += f"Total update steps (batch_num*epochs//accumulate_steps): {total_update_steps}, "
+            msg += f"Total update times (batch_num*epochs//accumulate_steps): {total_update_steps}, "
             msg += f"\nWarmup steps: {warmup_steps}, "
             msg += f"Validation steps: {valid_steps}, "
             msg += f"Early stop steps: {early_stop_steps}, "
@@ -150,12 +160,12 @@ class Trainer:
                     print(msg)
 
                 if (
-                    total_step % valid_steps == 0 and 
-                    valid_steps < batch_num and
+                    total_step % valid_steps == 0 
+                    and  valid_steps < batch_num 
                     # valid will happen after one epoch complete
-                    step < batch_num - valid_steps
+                    and step < batch_num - valid_steps
                 ):
-                    val_loss = self.eval(model, dev_dataloader, is_distributed, rank)
+                    val_loss, val_ppl = self.eval(model, dev_dataloader, is_distributed, rank)
                     if val_loss < val_best_loss:
                         out_file_name = f"{save_file_prefix}-{val_loss:0.4f}-{total_step}.pt"
                         self._save(model, out_file_name, is_distributed, rank)
@@ -167,7 +177,8 @@ class Trainer:
                         msg += f"Step(Batch)/Epoch: {step}/{epoch},  Total Step: {total_step},  "
                         msg += f"LearningRate: {lr_scheduler.get_last_lr()[0]:.6f}, \n"
                         msg += f"TrainLoss: {train_loss[0] / step:.4f},  "
-                        msg += f"ValidLoss: {val_loss:.4f}\n"
+                        msg += f"ValidLoss: {val_loss:.4f}, "
+                        msg += f"ValidPpl: {val_ppl:.4f}\n"
                         msg += "= " * 30
                         print(msg)
                     
@@ -183,7 +194,7 @@ class Trainer:
             if rank == 0:
                 inner_pbar.close()
             
-            val_loss = self.eval(model, dev_dataloader, is_distributed, rank)
+            val_loss, val_ppl = self.eval(model, dev_dataloader, is_distributed, rank)
             if val_loss < val_best_loss:
                 out_file_name = f"{save_file_prefix}-{val_loss:0.4f}-{total_step}.pt"
                 self._save(model, out_file_name, is_distributed, rank)
@@ -197,7 +208,7 @@ class Trainer:
                 secs = secs % 60
                 msg = f"Epoch: {epoch} | time in {mins:.1f} minutes, {secs} seconds \n"
                 msg += f"\tEpoch TrainLoss: {train_loss[0] / batch_num:.4f}  \n"
-                msg += f"\tEpoch ValidLoss: {val_loss:.4f}  "
+                msg += f"\tEpoch ValidLoss: {val_loss:.4f}  ValidPpl: {val_ppl}"
                 print(msg)
 
             if flag:
@@ -206,7 +217,8 @@ class Trainer:
         del model
 
     def eval(
-        self, model: nn.Module, 
+        self, 
+        model: nn.Module, 
         dataloader: DataLoader,
         is_distributed: bool,
         rank: int,
@@ -227,7 +239,7 @@ class Trainer:
                 output = self._fsdp_step(model, batch, rank, False)
             else:
                 output = self._step(model, batch, False)
-            loss_b = output.loss
+            loss_b = output.loss.float()
             val_loss[0] += loss_b
             if rank == 0:
                 inner_pbar.update(1)
@@ -235,7 +247,10 @@ class Trainer:
             dist.all_reduce(val_loss, op=dist.ReduceOp.AVG)
         if rank == 0:
             inner_pbar.close()
-        return val_loss[0] / steps
+        final_loss = val_loss[0] / steps
+        ppl = torch.exp(final_loss)
+        
+        return final_loss, ppl
 
     def _step(self, model: nn.Module, batch: Dict, is_train: bool = True):
         if self.device is not None:

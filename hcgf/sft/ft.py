@@ -14,6 +14,7 @@ from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM
 from transformers.modeling_utils import PreTrainedModel
 from transformers.tokenization_utils import PreTrainedTokenizer
 from transformers.generation.utils import (
+    GenerationConfig,
     LogitsProcessorList,
     StoppingCriteriaList,
     StoppingCriteria
@@ -169,18 +170,29 @@ class GlmBase:
             tk.unk_token_id = 0
             tk.bos_token_id = 9
             tk.eos_token_id = 9
-        elif self.llm_type.value == "baichuan":
+        elif self.llm_type.value in ["baichuan"]:
             tk = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+        elif self.llm_type.value in ["qwen"]:
+            tk = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+            default_pad_id = tk.eod_id = 151643
+            tk.eos_token_id = tk.eod_id = 151643
+            tk.bos_token_id = tk.eod_id = 151643
         else:
             raise NotImplemented
         
-        tk.pad_token_id = default_pad_id
+        pad_id = getattr(tk, "pad_token_id")
+        if not pad_id:
+            tk.pad_token_id = default_pad_id
         tk.padding_side = "left"
         tk.max_model_input_len = self.max_input_length
         tk.model_name = self.llm_type.value
+        tk.model_alias = self.llm_type.alias
         return tk
     
-    def load_model(self, model_id: str) -> PreTrainedModel:
+    def load_model(self, model_id: Optional[str] = None) -> PreTrainedModel:
+        if model_id is None:
+            model_id = self.model_id
+        
         if self.load_in_8bit:
             device_map = "auto"
         else:
@@ -197,12 +209,13 @@ class GlmBase:
         elif self.llm_type.value in ["chatglm"]:
             ModelCls = AutoModel
             trust_remote_code = True
-        elif self.llm_type.value in ["pangu", "baichuan", "bloom"]:
+        elif self.llm_type.value in ["pangu", "baichuan", "bloom", "qwen"]:
             ModelCls = AutoModelForCausalLM
             trust_remote_code = True
         else:
             raise NotImplemented
         
+        print("Model data type: ", self.torch_type)
         model = ModelCls.from_pretrained(
             model_id, 
             load_in_8bit=self.load_in_8bit,
@@ -262,7 +275,7 @@ class GlmBase:
         # NOTE: ChatGLM use mixed float, FSDP needs all parameters in a shard to be the same
         setup(rank, world_size)
         train_loader, val_loader = self.dataloader.train_dev_split(
-            args.batch_size, True, rank, train_include_dev=True
+            args.batch_size, True, rank, train_include_dev=False, shuffle_train=True, dev_size=0.1
         )
         auto_wrap_policy = get_transformer_wrap_policy(self.model, self.transformer_block)
         sharding_strategy = get_sharding_strategy(strategy)
@@ -293,6 +306,8 @@ class GlmBase:
             device=None,
             print_every=args.print_every,
             task_type=args.task_type,
+            adam_betas=tuple(args.adam_betas),
+            weight_decay=args.weight_decay,
         )
         if rank == 0:
             print("Begining tunning")
@@ -310,6 +325,8 @@ class GlmBase:
         out_dir: str = "./output/",
         print_every: Optional[int] = None,
         task_type: str = "lora",
+        adam_betas: tuple = (0.9, 0.95),
+        weight_decay: float = 0.01,
     ) -> None:
         """
         Note
@@ -344,7 +361,9 @@ class GlmBase:
         else:
             self.model.train()
         
-        train_dl, dev_dl = self.dataloader.train_dev_split(batch_size, train_include_dev=True)
+        train_dl, dev_dl = self.dataloader.train_dev_split(
+            batch_size, train_include_dev=False, shuffle_train=True, dev_size=0.1
+        )
         print("Begining tunning")
         trainer = Trainer(
             lr,
@@ -355,6 +374,8 @@ class GlmBase:
             device=self.device,
             print_every=print_every,
             task_type=task_type,
+            adam_betas=tuple(adam_betas),
+            weight_decay=weight_decay,
         )
         trainer.train(self.model, train_dl, dev_dl)
 
@@ -408,38 +429,39 @@ class GlmBase:
         temperature: float,
         top_p: float,
         repetition_penalty: float,
+        pad_token_id: int,
+        bos_token_id: int,
+        eos_token_id: int,
         logits_processor=None,
         stopping_criteria=None,
         **kwargs
     ) -> Dict[str, Any]:
+        
         if logits_processor is None:
             logits_processor = LogitsProcessorList()
         logits_processor.append(InvalidScoreLogitsProcessor())
         if stopping_criteria is None:
             stopping_criteria = StoppingCriteriaList()
         
+        gen_config = GenerationConfig(
+            max_new_tokens=max_new_tokens,
+            do_sample=do_sample,
+            temperature=temperature,
+            top_p=top_p,
+            top_k=top_k,
+            num_beams=num_beams,
+            repetition_penalty=repetition_penalty,
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+        )
+        
         gen_kwargs = {
-            "max_length": max_new_tokens,
-            "do_sample": do_sample,
-            "num_beams": num_beams,
-            "temperature": temperature,
-            "top_p": top_p,
-            "repetition_penalty": repetition_penalty,
-            
+            "generation_config": gen_config,
             "logits_processor": logits_processor,
             "stopping_criteria": stopping_criteria,
             **kwargs
         }
-        """
-        # Glm GenerationConfig
-        GenerationConfig {
-            "_from_model_config": true,
-            "bos_token_id": 130004,
-            "eos_token_id": 130005,
-            "pad_token_id": 3,
-            "transformers_version": "4.28.1"
-        }
-        """
         return gen_kwargs
     
     @torch.no_grad()
@@ -456,21 +478,21 @@ class GlmBase:
         stopping_criteria=None,
         **kwargs
     ):
-        prompt_len = self.max_input_length - max_new_tokens - 8
         if type(sents) == str:
             sents = [sents]
-        sents = [v[-prompt_len:] for v in sents]
-        inputs = tokenizer(sents, return_tensors="pt", padding=True)
+        inputs = self.tokenizer(
+            sents, return_tensors="pt", padding=True
+        )
         inputs = inputs.to(self.curr_device)
         gen_kwargs = self.get_generate_config(
             max_new_tokens, do_sample, num_beams, temperature, top_p, repetition_penalty,
             logits_processor, stopping_criteria, **kwargs,
         )
         outputs = self.model.generate(
-            **inputs,
+            inputs,
             **gen_kwargs,
         )
-        batch_out_sents = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        batch_out_sents = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
         res = []
         for i, out_s in enumerate(batch_out_sents):
             inp_s = sents[i]

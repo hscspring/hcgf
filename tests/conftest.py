@@ -23,6 +23,7 @@ def glm_data_file():
 def glm_tokenizer():
     _glm_tokenizer.max_model_input_len = 2048
     _glm_tokenizer.model_name = "chatglm"
+    _glm_tokenizer.model_alias = "chatglm"
     return _glm_tokenizer
 
 
@@ -30,6 +31,7 @@ def glm_tokenizer():
 def llama_tokenizer():
     _llama_tokenizer.max_model_input_len = 2048
     _llama_tokenizer.model_name = "llama"
+    _llama_tokenizer.model_alias = "llama"
     # decapoda got some issue, need fix
     _llama_tokenizer.pad_token_id = 0
     _llama_tokenizer.bos_token_id = 1

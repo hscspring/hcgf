@@ -61,14 +61,16 @@ class GlmDataLoader:
         is_distributed: bool = False,
         rank: Optional[int] = None,
         train_include_dev: bool = False,
+        shuffle_train: bool = True,
+        dev_size: float = 0.1,
     ) -> Tuple[DataLoader, DataLoader]:
-        train, dev = self._split(self.data, test_size=0.1)
+        train, dev = self._split(self.data, test_size=dev_size)
         if train_include_dev:
             train = train + dev
         train_dataset = GlmMapStyleDataset(train, self.tokenizer, self.max_seq_len)
         dev_dataset = GlmMapStyleDataset(dev, self.tokenizer, self.max_seq_len)
         # shuffle
-        tdl = self._build_dataloader(train_dataset, batch_size, True, is_distributed, rank)
+        tdl = self._build_dataloader(train_dataset, batch_size, shuffle_train, is_distributed, rank)
         # not shuffle
         ddl = self._build_dataloader(dev_dataset, batch_size, False, is_distributed, rank)
         return tdl, ddl

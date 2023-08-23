@@ -111,20 +111,31 @@ def format_metrics_to_gb(item):
 
 def get_model_type_from(model_id: str) -> LlmType:
     model_id = model_id.lower()
-    if "chatglm" in model_id or "chatglm2" in model_id:
-        return LlmType.chatglm.val
+    if "qwen" in model_id:
+        mt = LlmType.qwen.val
+    elif "chatglm" in model_id or "chatglm2" in model_id:
+        mt = LlmType.chatglm.val
+    
     elif "llama" in model_id and "alpaca" in model_id:
-        return LlmType.llama_alpaca.val
+        mt = LlmType.llama_alpaca.val
+        mt.alias = "alpaca"
     elif "llama" in model_id and "ziya" in model_id:
-        return LlmType.llama_ziya.val
+        mt = LlmType.llama_ziya.val
+        mt.alias = "ziya"
     elif "llama" in model_id and "belle" in model_id:
-        return LlmType.llama_belle.val
+        mt = LlmType.llama_belle.val
+        mt.alias = "belle"
+    elif "chatflow" in model_id:
+        mt = LlmType.llama_linly.val
+        mt.alias = "linly"
     elif "llama" in model_id:
-        return LlmType.llama_native.val
+        mt = LlmType.llama_native.val
+    
     elif "gpt2" in model_id:
-        return LlmType.gpt2.val
+        mt = LlmType.gpt2.val
     elif "pangu" in model_id:
-        return LlmType.pangu.val
+        mt = LlmType.pangu.val
+    
     # after llama
     elif "belle" in model_id:
         return LlmType.bloom.val
@@ -136,3 +147,29 @@ def get_model_type_from(model_id: str) -> LlmType:
         msg = f"Unsupported model: {model_id}, only support chatglm or llama. "
         msg += "Your input must contain either of them"
         raise ValueError(msg)
+    return mt
+
+
+
+def get_optim_parameters(
+    model: nn.Module,
+    weight_decay: float,
+    no_decay_name_list=["bias", "layer_norm", "layernorm"]
+):
+    ps = [
+        {
+            "params": [
+                p for n, p in model.named_parameters()
+                if (not any(nd in n for nd in no_decay_name_list) and p.requires_grad)
+            ],
+            "weight_decay": weight_decay,
+        },
+        {
+            "params": [
+                p for n, p in model.named_parameters()
+                if (any(nd in n for nd in no_decay_name_list) and p.requires_grad)
+            ],
+            "weight_decay": 0.0,
+        },
+    ]
+    return ps
