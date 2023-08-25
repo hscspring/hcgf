@@ -126,7 +126,8 @@ class ChatglmDataCollector:
 
 def general_collate_fn(
     pad_token_id: int, 
-    data_items: List[DataItem]
+    data_items: List[DataItem],
+    with_attention: bool = True,
 ) -> LlamaBatchInput:
     pad_to_multiple_of = 8
     len_ids = [len(v.input_ids) for v in data_items]
@@ -154,11 +155,26 @@ def general_collate_fn(
     input_ids = torch.stack(id_list)
     attention_mask = torch.stack(mask_list)
     labels = torch.stack(label_list)
-    return {
+    oup = {
         "input_ids": input_ids,
         "attention_mask": attention_mask,
         "labels": labels,
     }
+    if not with_attention:
+        oup.pop("attention_mask")
+    return oup
+
+
+
+@Register.regist
+class Chatglm2DataCollector:
+    
+    @classmethod
+    def collate_fn(
+        cls,
+        data_items: List[DataItem],
+    ) -> LlamaBatchInput:
+        return general_collate_fn(0, data_items, False)
 
 
 @Register.regist

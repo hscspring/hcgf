@@ -30,6 +30,7 @@ from ..trainer.fsdp import (
     cleanup,
     get_transformer_wrap_policy, 
     get_sharding_strategy,
+    check_bf16_ready,
     get_mp_policy, 
 )
 from ..utils import (
@@ -92,9 +93,15 @@ class GlmBase:
         world_size = torch.cuda.device_count()
         self.model_id = model_id
         self.llm_type = get_model_type_from(model_id)
-        print("llm type: ", self.llm_type.value)
 
-        self.torch_type = None
+        if check_bf16_ready():
+            self.torch_dtype = torch.bfloat16
+        else:
+            self.torch_dtype = torch.float16
+
+        print("llm type: ", self.llm_type.value)
+        print("llm torch dtype: ", self.torch_dtype)
+        
         self.load_in_8bit = False
         self.device = None
         
@@ -164,6 +171,10 @@ class GlmBase:
         elif self.llm_type.value in ["chatglm", "bloom"]:
             tk = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
             default_pad_id = 3
+        elif self.llm_type.value in ["chatglm2"]:
+            tk = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
+            tk.bos_token_id = 1
+            
         elif self.llm_type.value == "pangu":
             tk = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
             default_pad_id = 6
@@ -181,7 +192,7 @@ class GlmBase:
             raise NotImplemented
         
         pad_id = getattr(tk, "pad_token_id")
-        if not pad_id:
+        if pad_id is None:
             tk.pad_token_id = default_pad_id
         tk.padding_side = "left"
         tk.max_model_input_len = self.max_input_length
@@ -206,7 +217,7 @@ class GlmBase:
         elif self.llm_type.value == "gpt2":
             from transformers import GPT2LMHeadModel
             ModelCls = GPT2LMHeadModel
-        elif self.llm_type.value in ["chatglm"]:
+        elif self.llm_type.value in ["chatglm", "chatglm2"]:
             ModelCls = AutoModel
             trust_remote_code = True
         elif self.llm_type.value in ["pangu", "baichuan", "bloom", "qwen"]:
@@ -215,11 +226,10 @@ class GlmBase:
         else:
             raise NotImplemented
         
-        print("Model data type: ", self.torch_type)
         model = ModelCls.from_pretrained(
             model_id, 
             load_in_8bit=self.load_in_8bit,
-            torch_dtype=self.torch_type,
+            torch_dtype=self.torch_dtype,
             device_map=device_map,
             trust_remote_code=trust_remote_code,
         )
@@ -308,6 +318,7 @@ class GlmBase:
             task_type=args.task_type,
             adam_betas=tuple(args.adam_betas),
             weight_decay=args.weight_decay,
+            torch_dtype=self.torch_dtype,
         )
         if rank == 0:
             print("Begining tunning")
@@ -336,7 +347,7 @@ class GlmBase:
         """
         assert self.mode in ["8bit", "single_gpu"], "Not suit for FSDP, please specify `load_in_8bit` or `device`"
         assert self.dataloader is not None, "Please `load_data` first"
-        print("Switch to training mode...")
+        print(f"Switch to training mode, device: {self.device}")
 
         if not self.model_is_setup:
             self.load_pretrained()
@@ -376,6 +387,7 @@ class GlmBase:
             task_type=task_type,
             adam_betas=tuple(adam_betas),
             weight_decay=weight_decay,
+            torch_dtype=self.torch_dtype,
         )
         trainer.train(self.model, train_dl, dev_dl)
 
@@ -602,12 +614,39 @@ class GlmLora(GlmBase):
         self.lora_config = LoraConfigLoader(
             lora_r, lora_alpha, lora_dropout
         ).get_config(self.llm_type.value)
-        self.torch_type = torch.float16
     
     def load_pretrained(self, pt_path: Optional[str] = None) -> "Self":
         if not self.model_is_setup:
             self.model = self.load_model(self.model_id)
             self.model = LoraModel(self.model, self.lora_config, pt_path)
+            self.model_is_setup = True
+            if hasattr(self.model, "lm_head"):
+                self.model.lm_head = CastOutputToFloat(self.model.lm_head)
+            elif hasattr(self.model, "output_layer"):
+                self.model.output_layer = CastOutputToFloat(self.model.output_layer)
+        return self
+
+
+class GlmIa3(GlmBase):
+
+    def __init__(
+        self,
+        model_id: str,
+        device: Optional[str] = None,
+        lora_r: int = 8,
+        lora_alpha: int = 32,
+        lora_dropout: float = 0.1,
+        load_in_8bit: bool = False,
+    ):
+        super().__init__(model_id, device, load_in_8bit)
+        self.ia3_config = Ia3ConfigLoader(
+            lora_r, lora_alpha, lora_dropout
+        ).get_config(self.llm_type.value)
+    
+    def load_pretrained(self, pt_path: Optional[str] = None) -> "Self":
+        if not self.model_is_setup:
+            self.model = self.load_model(self.model_id)
+            self.model = Ia3Model(self.model, self.ia3_config, pt_path)
             self.model_is_setup = True
             self.model.lm_head = CastOutputToFloat(self.model.lm_head)
         return self
@@ -622,7 +661,7 @@ class GlmSft(GlmBase):
         load_in_8bit: bool = False,
     ):
         super().__init__(model_id, device, load_in_8bit)
-        self.torch_type = torch.bfloat16
+        self.torch_dtype = torch.bfloat16
     
     def load_pretrained(self, pt_path: Optional[str] = None) -> "Self":
         if not self.model_is_setup:

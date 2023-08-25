@@ -33,6 +33,7 @@ class Trainer:
         task_type: str,
         adam_betas: Optional[Tuple[float, float]],
         weight_decay: Optional[float],
+        torch_dtype: torch.Type,
     ):
         self.lr = lr
         self.num_epochs = num_epochs
@@ -49,6 +50,7 @@ class Trainer:
         if weight_decay is None:
             weight_decay = 0.01
         self.weight_decay = weight_decay
+        self.torch_dtype = torch_dtype
 
     def train(
         self,
@@ -255,11 +257,8 @@ class Trainer:
     def _step(self, model: nn.Module, batch: Dict, is_train: bool = True):
         if self.device is not None:
             batch = {k: v.to(self.device) for k, v in batch.items()}
-            dtype = torch.float16
-        else:
-            dtype = torch.bfloat16
         # mix precision
-        with torch.cuda.amp.autocast(dtype=dtype):
+        with torch.cuda.amp.autocast(dtype=self.torch_dtype):
             if is_train:
                 output = model(**batch)
             else:

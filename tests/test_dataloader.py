@@ -30,7 +30,6 @@ def test_dataset_max_len(glm_tokenizer, max_len, expected):
     ]
     ds = GlmMapStyleDataset(data, glm_tokenizer, max_len, remain_len=0)
     v = ds[0]
-    print(v, "GOGO")
     # 爱爱爱爱 encode后长度为7，超过后变为5，加上completion的三个：空白符、谁、EOS，共8个token
     assert len(v.input_ids) == expected
 

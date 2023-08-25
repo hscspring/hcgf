@@ -149,6 +149,18 @@ AI: """
             inp = f"{prompt}"
         return inp
     
+    def build_chatglm2_input(
+        self, 
+        instruction: str, 
+        history: List[Tuple[str, str]], 
+        prompt: str,
+    ):
+        inp = ""
+        for i, (old_query, response) in enumerate(history):
+            inp += "[Round {}]\n\n 问：{}\n\n 答：{}\n\n".format(i + 1, old_query, response)
+        inp += "[Round {}]\n\n 问：{}\n\n 答：".format(len(history) + 1, prompt)
+        return inp
+    
     def build_input(
         self, 
         instruction: str, 
@@ -162,6 +174,8 @@ AI: """
             return self.build_linly_input(instruction, history, prompt)
         elif alias == "belle":
             return self.build_belle_input(instruction, history, prompt)
+        elif alias == "chatglm2":
+            return self.build_chatglm2_input(instruction, history, prompt)
         else:
             return self.build_default_input(instruction, prompt)
     

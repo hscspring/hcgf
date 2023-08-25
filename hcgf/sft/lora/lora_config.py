@@ -32,6 +32,10 @@ class LoraConfigLoader:
             enable_lora=[True, False, True],
             bias="none"
         )
+
+    @property
+    def chatglm2(self):
+        return self.chatglm
     
     @property
     def qwen(self):

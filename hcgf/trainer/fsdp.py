@@ -62,8 +62,8 @@ def cleanup():
     dist.destroy_process_group()
 
 
-def get_mp_policy() -> Optional[MixedPrecision]:
-    bf16_ready = (
+def check_bf16_ready() -> bool:
+    return (
         torch.version.cuda
         and torch.cuda.is_bf16_supported()
         and LooseVersion(torch.version.cuda) >= "11.0"
@@ -71,7 +71,9 @@ def get_mp_policy() -> Optional[MixedPrecision]:
         and torch.cuda.nccl.version() >= (2, 10)
     )
 
-    if bf16_ready:
+
+def get_mp_policy() -> Optional[MixedPrecision]:
+    if check_bf16_ready():
         mp_policy = bfSixteen
     else:
         mp_policy = None # defaults to fp32

@@ -113,7 +113,9 @@ def get_model_type_from(model_id: str) -> LlmType:
     model_id = model_id.lower()
     if "qwen" in model_id:
         mt = LlmType.qwen.val
-    elif "chatglm" in model_id or "chatglm2" in model_id:
+    elif "chatglm2" in model_id:
+        mt = LlmType.chatglm2.val
+    elif "chatglm" in model_id:
         mt = LlmType.chatglm.val
     
     elif "llama" in model_id and "alpaca" in model_id:
