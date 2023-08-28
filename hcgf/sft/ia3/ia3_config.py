@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from dataclasses import dataclass
 
 
@@ -7,6 +7,7 @@ class Ia3Config:
 
     target_modules: List[str]
     feedforward_modules: List[str]
+    enable_ia3: Optional[List[bool]] = None
 
 
 class Ia3ConfigLoader:
@@ -17,15 +18,17 @@ class Ia3ConfigLoader:
     @property
     def chatglm(self):
         return Ia3Config(
-            [],
+            ["query_key_value", "dense_4h_to_h"],
             ["dense_4h_to_h"],
+            [False, True, True],
         )
     
     @property
     def qwen(self):
         return Ia3Config(
-            [],
+            ["c_attn", "mlp.c_proj"],
             ["mlp.c_proj"],
+            [False, True, True],
         )
 
     @property

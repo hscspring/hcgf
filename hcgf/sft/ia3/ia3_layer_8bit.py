@@ -1,6 +1,8 @@
 """
 Modified From peft
 """
+from typing import List, Optional
+
 import torch
 import bitsandbytes as bnb
 
@@ -15,6 +17,7 @@ class Linear8bitLt(bnb.nn.Linear8bitLt, Ia3Layer):
             out_features: int,
             is_feedforward: bool,
             bias: bool,
+            enable_ia3: Optional[List[bool]] = None
             **kwargs,
         ) -> None:
             bnb.nn.Linear8bitLt.__init__(
@@ -28,11 +31,16 @@ class Linear8bitLt(bnb.nn.Linear8bitLt, Ia3Layer):
                 index=kwargs.get("index", None),
             )
 
+            self.enable_ia3 = enable_ia3
             self.is_feedforward = is_feedforward
             if self.is_feedforward:
                 self.ia3 = bnb.nn.Linear8bitLt(self.in_features, 1, bias=False)
             else:
                 self.ia3 = bnb.nn.Linear8bitLt(1, self.out_features, bias=False)
+                if self.enable_ia3 is not None:
+                    self.ia3_ind, self.ia3_mask = self.get_ia3_ind_mask(
+                        out_features, enable_ia3
+                    )
             
             self.weight.requires_grad = False
             self.reset_parameters()
@@ -45,5 +53,7 @@ class Linear8bitLt(bnb.nn.Linear8bitLt, Ia3Layer):
                 result = super().forward(x * ia3_scaling)
             else:
                 result = super().forward(x)
+                if self.enable_ia3 is not None:
+                    ia3_scaling = (ia3_scaling * self.ia3_ind) + self.ia3_mask
                 result = result * ia3_scaling
             return result

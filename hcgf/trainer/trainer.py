@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 from transformers import get_linear_schedule_with_warmup
 import pnlp
 
-from ..utils import get_lora_state_dict, get_date_of_run, get_optim_parameters
+from ..utils import get_x_state_dict, get_date_of_run, get_optim_parameters
 
 
 class Trainer:
@@ -278,9 +278,9 @@ class Trainer:
         return output
     
     def _get_static_dict(self, model) -> dict:
-        if self.task_type == "lora":
-            sd = get_lora_state_dict(model)
-        elif self.task_type == "sft":
+        if self.task_type != "sft":
+            sd = get_x_state_dict(model, self.task_type)
+        else:
             sd = model.state_dict()
         return sd
 
