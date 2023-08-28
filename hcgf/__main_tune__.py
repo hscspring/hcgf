@@ -2,7 +2,7 @@ import argparse
 import torch
 import torch.multiprocessing as mp
 
-from .sft.ft import GlmLora, GlmSft
+from .sft.ft import GlmLora, GlmSft, GlmIa3
 
 
 def main():
@@ -77,9 +77,12 @@ def main():
         help="[model] lora r (default: 8)"
     )
 
+    parser_sft = subparsers.add_parser("ia3", help="ia3 fine-tuning")
+    parser_sft.set_defaults(task_type="ia3")
+
     args = parser.parse_args()
     print(f"Training with args: {args}")
-    assert args.task_type in ["sft", "lora"], "must provide a task_type like `sft` or `lora`"
+    assert args.task_type in ["sft", "lora", "ia3"], "must provide a task_type like `sft`, `lora`, `ia3`"
 
     param_list = [
         "batch_size", "lr", "num_epochs", 
@@ -94,6 +97,8 @@ def main():
             glm = GlmSft(args.model)
         elif args.task_type == "lora":
             glm = GlmLora(args.model, lora_r=args.lora_r)
+        elif args.task_type == "ia3":
+            glm = GlmIa3(args.model)
         glm.load_data(args.data_path, max_seq_len=args.max_seq_len)
         params["strategy"] = args.strategy
         params["pretrained_ckpt"] = args.pretrained_ckpt
@@ -104,6 +109,9 @@ def main():
             glm = GlmSft(args.model, load_in_8bit=True)
         elif args.task_type == "lora":
             glm = GlmLora(args.model, lora_r=args.lora_r, load_in_8bit=True)
+        elif args.task_type == "ia3":
+            glm = GlmIa3(args.model, load_in_8bit=True)
+        
         (glm
             .load_data(args.data_path, max_seq_len=args.max_seq_len)
             .load_pretrained(args.pretrained_ckpt)
@@ -115,6 +123,9 @@ def main():
             glm = GlmSft(args.model, device=device)
         elif args.task_type == "lora":
             glm = GlmLora(args.model, lora_r=args.lora_r, device=device)
+        elif args.task_type == "ia3":
+            glm = GlmIa3(args.model, device=device)
+        
         (glm
             .load_data(args.data_path, max_seq_len=args.max_seq_len)
             .load_pretrained(args.pretrained_ckpt)

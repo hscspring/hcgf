@@ -10,27 +10,10 @@ from transformers.pytorch_utils import Conv1D
 
 from .lora_layer import Linear, MergedLinear
 from .lora_config import LoraConfig
+from ..base import BaseModel, BaseMixin
 
 
-def mark_only_lora_as_trainable(model: nn.Module, bias: str = "none") -> None:
-    for n, p in model.named_parameters():
-        if "lora_" not in n:
-            p.requires_grad = False
-    if bias == "none":
-        return
-    elif bias == "all":
-        for n, p in model.named_parameters():
-            if "bias" in n:
-                p.requires_grad = True
-    elif bias == "lora_only":
-        for m in model.modules():
-            if isinstance(m, LoraLayer) and hasattr(m, "bias") and m.bias is not None:
-                m.bias.requires_grad = True
-    else:
-        raise NotImplementedError
-
-
-class LoraModel(nn.Module):
+class LoraModel(BaseModel, BaseMixin):
     def __init__(self, model: nn.Module, config: LoraConfig, ckpt_path: Optional[str]):
         super().__init__()
         self.lora_config = config
@@ -39,7 +22,7 @@ class LoraModel(nn.Module):
         if ckpt_path is not None:
             static = torch.load(ckpt_path)
             self.model.load_state_dict(static, strict=False)
-        mark_only_lora_as_trainable(self.model, self.lora_config.bias)
+        self.mark_only_x_as_trainable("lora_", self.lora_config.bias)
         self.forward = self.model.forward
 
     def _find_and_replace(self):
@@ -100,25 +83,3 @@ class LoraModel(nn.Module):
                 new_module = MergedLinear(in_features, out_features, bias=bias, **kwargs)
             
             self._replace_module(parent, target_name, new_module, target)
-
-    def _get_submodules(self, key: str):
-        tmp = key.split(".")
-        parent = self.model.get_submodule(".".join(tmp[:-1]))
-        target_name = tmp[-1]
-        target = self.model.get_submodule(key)
-        return parent, target, target_name
-
-    def _replace_module(self, parent_module, child_name, new_module, old_module):
-        setattr(parent_module, child_name, new_module)
-        new_module.weight = old_module.weight
-        if old_module.bias is not None:
-            new_module.bias = old_module.bias
-        if getattr(old_module, "state", None) is not None:
-            new_module.state = old_module.state
-            new_module.to(old_module.weight.device)
-    
-    def __getattr__(self, name: str):
-        try:
-            return super().__getattr__(name)
-        except AttributeError:
-            return getattr(self.model, name)

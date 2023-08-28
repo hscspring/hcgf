@@ -22,6 +22,7 @@ from transformers.generation.utils import (
 from transformers.generation.logits_process import LogitsProcessor
 
 from .lora import LoraModel, LoraConfigLoader
+from .ia3 import Ia3Model, Ia3ConfigLoader
 from ..dataloader import GlmDataLoader
 from ..data_model import Tensor
 from ..trainer import Trainer
@@ -153,9 +154,9 @@ class GlmBase:
             if "bias" not in name and param.ndim == 1 and param.dtype != dtype:
                 param.data = param.data.to(dtype)
 
-    def _cast_lora_to(self, dtype: torch.Type) -> None:
+    def _cast_x_to(self, x: str, dtype: torch.Type) -> None:
         for name, param in self.model.named_parameters():
-            if "lora_" in name:
+            if x in name:
                 param.data = param.data.to(dtype)
     
     def load_tokenizer(self) -> PreTrainedTokenizer:
@@ -278,8 +279,8 @@ class GlmBase:
         if not self.model_is_setup:
             self.load_pretrained()
         
-        if args.task_type == "lora":
-            self._cast_lora_to(torch.float32)
+        if args.task_type in ["lora", "ia3"]:
+            self._cast_x_to(args.task_type, torch.float32)
         self.model.config.use_cache = False
 
         # NOTE: ChatGLM use mixed float, FSDP needs all parameters in a shard to be the same
@@ -357,8 +358,8 @@ class GlmBase:
             # from https://colab.research.google.com/drive/1jCkpikz0J2o20FBQmYmAGdiKmJGOMo-o?usp=sharing
             self._cast_small_to(torch.float32)
         
-        if task_type == "lora":
-            self._cast_lora_to(torch.float32)
+        if task_type in ["lora", "ia3"]:
+            self._cast_x_to(task_type, torch.float32)
         
         print_trainable_parameters(self.model)
 
@@ -398,7 +399,7 @@ class GlmBase:
         self.model.half()
 
         if self.load_in_8bit:
-            self._cast_lora_to(torch.float32)
+            self._cast_x_to(self.task_type, torch.float32)
 
         if hasattr(self.model, "lora_config"):
             self.model.lora_config.inference_mode = True
@@ -611,6 +612,7 @@ class GlmLora(GlmBase):
         load_in_8bit: bool = False,
     ):
         super().__init__(model_id, device, load_in_8bit)
+        self.task_type = "lora"
         self.lora_config = LoraConfigLoader(
             lora_r, lora_alpha, lora_dropout
         ).get_config(self.llm_type.value)
@@ -633,15 +635,11 @@ class GlmIa3(GlmBase):
         self,
         model_id: str,
         device: Optional[str] = None,
-        lora_r: int = 8,
-        lora_alpha: int = 32,
-        lora_dropout: float = 0.1,
         load_in_8bit: bool = False,
     ):
         super().__init__(model_id, device, load_in_8bit)
-        self.ia3_config = Ia3ConfigLoader(
-            lora_r, lora_alpha, lora_dropout
-        ).get_config(self.llm_type.value)
+        self.task_type = "ia3"
+        self.ia3_config = Ia3ConfigLoader().get_config(self.llm_type.value)
     
     def load_pretrained(self, pt_path: Optional[str] = None) -> "Self":
         if not self.model_is_setup:
