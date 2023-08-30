@@ -646,7 +646,11 @@ class GlmIa3(GlmBase):
             self.model = self.load_model(self.model_id)
             self.model = Ia3Model(self.model, self.ia3_config, pt_path)
             self.model_is_setup = True
-            self.model.lm_head = CastOutputToFloat(self.model.lm_head)
+            if hasattr(self.model, "lm_head"):
+                self.model.lm_head = CastOutputToFloat(self.model.lm_head)
+            # chatglm
+            elif hasattr(self.model, "output_layer"):
+                self.model.output_layer = CastOutputToFloat(self.model.output_layer)
         return self
 
 

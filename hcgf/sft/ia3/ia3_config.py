@@ -24,6 +24,10 @@ class Ia3ConfigLoader:
         )
     
     @property
+    def chatglm2(self):
+        return self.chatglm
+    
+    @property
     def qwen(self):
         return Ia3Config(
             ["c_attn", "mlp.c_proj"],

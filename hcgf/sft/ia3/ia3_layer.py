@@ -29,7 +29,7 @@ class Linear(nn.Linear, Ia3Layer):
         out_features: int,
         is_feedforward: bool,
         bias: bool,
-        enable_ia3: Optional[List[bool]] = None
+        enable_ia3: Optional[List[bool]] = None,
         **kwargs,
     ):
         nn.Linear.__init__(self, in_features, out_features, bias=bias, **kwargs)

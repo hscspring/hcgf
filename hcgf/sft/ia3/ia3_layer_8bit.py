@@ -17,7 +17,7 @@ class Linear8bitLt(bnb.nn.Linear8bitLt, Ia3Layer):
             out_features: int,
             is_feedforward: bool,
             bias: bool,
-            enable_ia3: Optional[List[bool]] = None
+            enable_ia3: Optional[List[bool]] = None,
             **kwargs,
         ) -> None:
             bnb.nn.Linear8bitLt.__init__(
