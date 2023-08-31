@@ -1,1 +1,1 @@
-from .ft import GlmLora
+from .ft import GlmLora, GlmIa3

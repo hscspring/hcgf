@@ -1,16 +1,15 @@
-from transformers import LlamaTokenizer, LlamaForCausalLM
+import torch
+import hcgf
 
-id = "../cache/models/BELLE-LLaMA-7B-2M/"
 
-device = "cpu"
+gl = hcgf.GlmIa3("THUDM/chatglm-6b", device="cuda:0", torch_dtype=torch.float16)
 
-tokenizer = LlamaTokenizer.from_pretrained(id)
-model = LlamaForCausalLM.from_pretrained(id).to(device)
 
-prompt = "Hey, are you conscious? Can you talk to me?"
-inputs = tokenizer(prompt, return_tensors="pt").to(device)
-generate_ids = model.generate(inputs.input_ids, max_length=30)
-output = tokenizer.batch_decode(
-    generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
-)[0]
-print(output)
+params = {
+    "lr": 2e-4,
+    "num_epochs": 2, 
+    "warmup_steps": 0, 
+    "accumulate_steps": 1, 
+    "print_every": 2, 
+}
+gl.load_data("./tests/test_data/test_data.json", max_seq_len=32).tune(**params)

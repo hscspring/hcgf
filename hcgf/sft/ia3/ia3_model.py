@@ -39,7 +39,7 @@ class Ia3Model(BaseModel, BaseMixin):
                 key.endswith(target_key) for target_key in self.ia3_config.feedforward_modules
             )
 
-            print(f"IA3 found module: ==> {key}")
+            print(f"IA3 found module: ==> {key}, is_ffn: {is_feedforward}")
             parent, target, target_name = self._get_submodules(key)
             
             in_features, out_features = target.in_features, target.out_features
@@ -59,8 +59,15 @@ class Ia3Model(BaseModel, BaseMixin):
                     out_features,
                     is_feedforward,
                     bias,
+                    self.ia3_config.enable_ia3,
                     **eightbit_kwargs,
                 )
             else:
-                new_module = Linear(in_features, out_features, is_feedforward, bias)
+                new_module = Linear(
+                    in_features, 
+                    out_features, 
+                    is_feedforward, 
+                    bias, 
+                    self.ia3_config.enable_ia3,
+                )
             self._replace_module(parent, target_name, new_module, target)

@@ -1,6 +1,8 @@
 import pytest
 
 import os
+import shutil
+from pathlib import Path
 
 from hcgf.data_model import DataItem
 from hcgf.dataloader.data_loader import GlmDataLoader
@@ -63,3 +65,39 @@ def mocked_data():
         {"prompt": "你好", "completion": "谁"}
     ]
     return data
+
+
+def run_ft(gl, glm_data_file: str, params: dict):
+    p1 = "./test_output1/"
+    p2 = "./test_output2/"
+    params["out_dir"] = p1
+    print("tuning...")
+    (gl
+    .load_data(glm_data_file, max_seq_len=32)
+    .tune(**params))
+    gl.eval()
+    q = "你是谁？"
+    response, history = gl.chat(q, temperature=0.1)
+    print(q, response)
+    params["out_dir"] = p2
+    print(f"\n\ntuning again with params: {params}")
+    gl.tune(**params)
+    print("\n\ninference...")
+    out_dir = Path(os.path.join(params["out_dir"], "ckpt"))
+    best_ckpt = sorted(
+        out_dir.glob("*best*"), 
+        key=lambda x: int(x.stem.split("-")[-1])
+    )[-1]
+    gl.load_pretrained(best_ckpt).eval()
+    response, history = gl.chat(q, temperature=0.1)
+    print(q, response)
+    assert 1, "should pass"
+
+    for path in [p1, p2]:
+        if os.path.exists(path):
+            shutil.rmtree(path)
+
+
+@pytest.fixture
+def ft_runner():
+    return run_ft

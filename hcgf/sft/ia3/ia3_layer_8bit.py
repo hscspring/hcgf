@@ -44,8 +44,6 @@ class Linear8bitLt(bnb.nn.Linear8bitLt, Ia3Layer):
             
             self.weight.requires_grad = False
             self.reset_parameters()
-            self.to(self.weight.device)
-
 
         def forward(self, x: torch.Tensor) -> torch.Tensor:
             ia3_scaling = self.ia3.weight.flatten()

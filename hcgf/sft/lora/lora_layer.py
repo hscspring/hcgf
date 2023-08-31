@@ -214,5 +214,3 @@ class MergedLinear(nn.Linear, LoraLayer):
                 after_B = self.lora_B(after_A.transpose(-2, -1)).transpose(-2, -1)
                 result += self.zero_pad(after_B) * self.scaling
             return result
-
-
