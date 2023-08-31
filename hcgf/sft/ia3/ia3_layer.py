@@ -74,10 +74,10 @@ class Linear(nn.Linear, Ia3Layer):
             )
         else:
             if self.enable_ia3 is not None:
-                self.ia3_ind, self.ia3_mask = self.get_ia3_ind_mask(
+                ia3_ind, ia3_mask = self.get_ia3_ind_mask(
                     self.weight, self.out_features, self.enable_ia3
                 )
-                ia3_scaling = (ia3_scaling * self.ia3_ind) + self.ia3_mask
+                ia3_scaling = (ia3_scaling * ia3_ind) + ia3_mask
             result = F.linear(x, self.weight, bias=self.bias)
             result = result.to(ia3_scaling.dtype) * ia3_scaling
         result = result.to(previous_dtype)

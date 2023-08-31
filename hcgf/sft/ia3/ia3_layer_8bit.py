@@ -31,16 +31,13 @@ class Linear8bitLt(bnb.nn.Linear8bitLt, Ia3Layer):
                 index=kwargs.get("index", None),
             )
 
+            self.out_features = out_features
             self.enable_ia3 = enable_ia3
             self.is_feedforward = is_feedforward
             if self.is_feedforward:
                 self.ia3 = bnb.nn.Linear8bitLt(self.in_features, 1, bias=False)
             else:
                 self.ia3 = bnb.nn.Linear8bitLt(1, self.out_features, bias=False)
-                if self.enable_ia3 is not None:
-                    self.ia3_ind, self.ia3_mask = self.get_ia3_ind_mask(
-                        out_features, enable_ia3
-                    )
             
             self.weight.requires_grad = False
             self.reset_parameters()
@@ -52,6 +49,9 @@ class Linear8bitLt(bnb.nn.Linear8bitLt, Ia3Layer):
             else:
                 result = super().forward(x)
                 if self.enable_ia3 is not None:
-                    ia3_scaling = (ia3_scaling * self.ia3_ind) + self.ia3_mask
+                    ia3_ind, ia3_mask = self.get_ia3_ind_mask(
+                        self.weight, self.out_features, self.enable_ia3
+                    )
+                    ia3_scaling = (ia3_scaling * ia3_ind) + ia3_mask
                 result = result * ia3_scaling
             return result

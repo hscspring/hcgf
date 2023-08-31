@@ -133,7 +133,9 @@ class GlmBase:
 
         self.dataloader = None
 
-        self.stop_tokens = ["问题："]
+        self.stop_tokens = []
+        if self.llm_type.value == "chatglm":
+            self.stop_tokens.append("问题：")
         self.builtin_stop_tensor_list = self._init_stop_tensor_list(self.stop_tokens)
     
     def _init_stop_tensor_list(
@@ -479,7 +481,6 @@ class GlmBase:
         }
         return gen_kwargs
     
-    @torch.no_grad()
     def generate(
         self,
         sents: Union[str, List[str]],
@@ -510,10 +511,12 @@ class GlmBase:
             logits_processor, stopping_criteria, 
             **kwargs,
         )
-        outputs = self.model.generate(
-            inputs,
-            **gen_kwargs,
-        )
+        with torch.cuda.amp.autocast(dtype=self.torch_dtype):
+            with torch.no_grad():
+                outputs = self.model.generate(
+                    inputs,
+                    **gen_kwargs,
+                )
         batch_out_sents = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
         res = []
         for i, out_s in enumerate(batch_out_sents):
@@ -522,7 +525,6 @@ class GlmBase:
             res.append(out_s)
         return res
 
-    @torch.no_grad()
     def stream_chat(
         self,
         query: str,
@@ -562,14 +564,16 @@ class GlmBase:
             pad_token_id, bos_token_id, eos_token_id,
             logits_processor, stopping_criteria, **kwargs,
         )
-        for outputs in self.model.stream_generate(
-            **inputs, **gen_kwargs
-        ):
-            outputs = outputs.tolist()[0][len(inputs["input_ids"][0]):]
-            response = self.tokenizer.decode(outputs)
-            response = self.model.process_response(response)
-            new_history = history + [(query, response)]
-            yield response, new_history
+        with torch.cuda.amp.autocast(dtype=self.torch_dtype):
+            with torch.no_grad():
+                for outputs in self.model.stream_generate(
+                    **inputs, **gen_kwargs
+                ):
+                    outputs = outputs.tolist()[0][len(inputs["input_ids"][0]):]
+                    response = self.tokenizer.decode(outputs)
+                    response = self.model.process_response(response)
+                    new_history = history + [(query, response)]
+                    yield response, new_history
 
     def chat(
         self,
@@ -600,6 +604,7 @@ class GlmBase:
                 stop_tensor_list,
                 self.curr_device)]
 
+        response = ""
         for response, history in self.stream_chat(
             inp, history, max_new_tokens,
             top_p=top_p, temperature=temperature,
