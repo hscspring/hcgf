@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 class Ia3Layer:
@@ -62,10 +63,8 @@ class Linear(nn.Linear, Ia3Layer):
                 bias=self.bias,
             )
         else:
-            print(1, ia3_scaling)
             if self.enable_ia3 is not None:
                 ia3_scaling = (ia3_scaling * self.ia3_ind) + self.ia3_mask
-            print(2, ia3_scaling)
             result = F.linear(x, self.weight, bias=self.bias)
             result = result.to(ia3_scaling.dtype) * ia3_scaling
         result = result.to(previous_dtype)

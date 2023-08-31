@@ -2,7 +2,9 @@
 Modified From peft
 """
 from typing import Optional
+import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .ia3_layer import Linear
 from .ia3_config import Ia3Config

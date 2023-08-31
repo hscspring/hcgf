@@ -2,6 +2,7 @@ import os
 import shutil
 from pathlib import Path
 import pytest
+import torch
 
 from hcgf.sft.ft import GlmLora
 
@@ -25,7 +26,7 @@ def run_ft(gl: GlmLora, glm_data_file: str, params: dict):
     out_dir = Path(os.path.join(params["out_dir"], "ckpt"))
     best_ckpt = sorted(
         out_dir.glob("*best*"), 
-        key=lambda x: int(x.stem.split("best-")[-1])
+        key=lambda x: int(x.stem.split("-")[-1])
     )[-1]
     gl.load_pretrained(best_ckpt).eval()
     response, history = gl.chat(q, temperature=0.1)
@@ -40,7 +41,7 @@ def run_ft(gl: GlmLora, glm_data_file: str, params: dict):
 @pytest.mark.slow
 def test_lora_signle_gpu_ft(glm_data_file, glm_tune_param):
     model_id = "THUDM/chatglm-6b"
-    gl = GlmLora(model_id, device="cuda:0")
+    gl = GlmLora(model_id, device="cuda:0", torch_dtype=torch.float16)
     run_ft(gl, glm_data_file, glm_tune_param)
 
 
@@ -55,7 +56,5 @@ def test_lora_8bit_ft(glm_data_file, glm_tune_param):
     if no_bnb:
         pass
     else:
-        gl = GlmLora(model_id, load_in_8bit=True)
+        gl = GlmLora(model_id, load_in_8bit=True, torch_dtype=torch.float16)
         run_ft(gl, glm_data_file, glm_tune_param)
-    
-    

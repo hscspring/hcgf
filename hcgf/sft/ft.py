@@ -90,6 +90,7 @@ class GlmBase:
         model_id: str,
         device: Optional[str] = None,
         load_in_8bit: bool = False,
+        torch_dtype: Optional[torch.Type] = None,
     ):
         world_size = torch.cuda.device_count()
         self.model_id = model_id
@@ -99,6 +100,9 @@ class GlmBase:
             self.torch_dtype = torch.bfloat16
         else:
             self.torch_dtype = torch.float16
+        
+        if torch_dtype is not None:
+            self.torch_dtype = torch_dtype
 
         print("llm type: ", self.llm_type.value)
         print("llm torch dtype: ", self.torch_dtype)
@@ -279,8 +283,6 @@ class GlmBase:
         if not self.model_is_setup:
             self.load_pretrained()
         
-        if args.task_type in ["lora", "ia3"]:
-            self._cast_x_to(args.task_type, torch.float32)
         self.model.config.use_cache = False
 
         # NOTE: ChatGLM use mixed float, FSDP needs all parameters in a shard to be the same
@@ -353,13 +355,12 @@ class GlmBase:
         if not self.model_is_setup:
             self.load_pretrained()
         
+        self._cast_x_to(self.task_type, torch.float32)
+        
         if self.load_in_8bit:
             # 8bit时cast，float16不cast？
             # from https://colab.research.google.com/drive/1jCkpikz0J2o20FBQmYmAGdiKmJGOMo-o?usp=sharing
             self._cast_small_to(torch.float32)
-        
-        if task_type in ["lora", "ia3"]:
-            self._cast_x_to(task_type, torch.float32)
         
         print_trainable_parameters(self.model)
 
@@ -441,6 +442,7 @@ class GlmBase:
         num_beams: int,
         temperature: float,
         top_p: float,
+        top_k: int,
         repetition_penalty: float,
         pad_token_id: int,
         bos_token_id: int,
@@ -481,12 +483,16 @@ class GlmBase:
     def generate(
         self,
         sents: Union[str, List[str]],
-        max_new_tokens: int = 512,
-        do_sample: bool = True,
-        num_beams: int = 1,
-        temperature: float = 0.2,
-        top_p: float = 0.7,
-        repetition_penalty: float = 1.02,
+        max_new_tokens: int,
+        do_sample: bool,
+        num_beams: int,
+        temperature: float,
+        top_p: float,
+        top_k: int,
+        repetition_penalty: float,
+        pad_token_id: int,
+        bos_token_id: int,
+        eos_token_id: int,
         logits_processor=None,
         stopping_criteria=None,
         **kwargs
@@ -498,8 +504,11 @@ class GlmBase:
         )
         inputs = inputs.to(self.curr_device)
         gen_kwargs = self.get_generate_config(
-            max_new_tokens, do_sample, num_beams, temperature, top_p, repetition_penalty,
-            logits_processor, stopping_criteria, **kwargs,
+            max_new_tokens, do_sample, num_beams, 
+            temperature, top_p, top_k, repetition_penalty,
+            pad_token_id, bos_token_id, eos_token_id,
+            logits_processor, stopping_criteria, 
+            **kwargs,
         )
         outputs = self.model.generate(
             inputs,
@@ -523,6 +532,7 @@ class GlmBase:
         num_beams: int = 1,
         temperature: float = 0.95,
         top_p: float = 0.7,
+        top_k: int = 50,
         repetition_penalty: float = 1.02,
         logits_processor=None,
         stopping_criteria=None,
@@ -543,8 +553,13 @@ class GlmBase:
         prompt = prompt[-prompt_len:]
         inputs = self.tokenizer([prompt], return_tensors="pt")
         inputs = inputs.to(self.curr_device)
+        pad_token_id = self.tokenizer.pad_token_id
+        bos_token_id = self.tokenizer.bos_token_id
+        eos_token_id = self.tokenizer.eos_token_id
         gen_kwargs = self.get_generate_config(
-            max_new_tokens, do_sample, num_beams, temperature, top_p, repetition_penalty,
+            max_new_tokens, do_sample, num_beams, 
+            temperature, top_p, top_k, repetition_penalty,
+            pad_token_id, bos_token_id, eos_token_id,
             logits_processor, stopping_criteria, **kwargs,
         )
         for outputs in self.model.stream_generate(
@@ -610,8 +625,9 @@ class GlmLora(GlmBase):
         lora_alpha: int = 32,
         lora_dropout: float = 0.1,
         load_in_8bit: bool = False,
+        torch_dtype: torch.Type = None,
     ):
-        super().__init__(model_id, device, load_in_8bit)
+        super().__init__(model_id, device, load_in_8bit, torch_dtype)
         self.task_type = "lora"
         self.lora_config = LoraConfigLoader(
             lora_r, lora_alpha, lora_dropout
@@ -636,8 +652,9 @@ class GlmIa3(GlmBase):
         model_id: str,
         device: Optional[str] = None,
         load_in_8bit: bool = False,
+        torch_dtype: torch.Type = None,
     ):
-        super().__init__(model_id, device, load_in_8bit)
+        super().__init__(model_id, device, load_in_8bit, torch_dtype)
         self.task_type = "ia3"
         self.ia3_config = Ia3ConfigLoader().get_config(self.llm_type.value)
     
@@ -661,8 +678,9 @@ class GlmSft(GlmBase):
         model_id: str,
         device: Optional[str] = None,
         load_in_8bit: bool = False,
+        torch_dtype: torch.Type = None,
     ):
-        super().__init__(model_id, device, load_in_8bit)
+        super().__init__(model_id, device, load_in_8bit, torch_dtype)
         self.torch_dtype = torch.bfloat16
     
     def load_pretrained(self, pt_path: Optional[str] = None) -> "Self":

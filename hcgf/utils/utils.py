@@ -136,20 +136,20 @@ def get_model_type_from(model_id: str) -> LlmType:
 def get_optim_parameters(
     model: nn.Module,
     weight_decay: float,
-    no_decay_name_list=["bias", "layer_norm", "layernorm"]
+    no_decay_name_list=["bias", "layer_norm", "layernorm", "ln_"]
 ):
     ps = [
         {
             "params": [
                 p for n, p in model.named_parameters()
-                if (not any(nd in n for nd in no_decay_name_list) and p.requires_grad)
+                if (p.ndim != 1 and p.requires_grad)
             ],
             "weight_decay": weight_decay,
         },
         {
             "params": [
                 p for n, p in model.named_parameters()
-                if (any(nd in n for nd in no_decay_name_list) and p.requires_grad)
+                if (p.ndim == 1 and p.requires_grad)
             ],
             "weight_decay": 0.0,
         },

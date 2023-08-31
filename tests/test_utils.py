@@ -14,4 +14,5 @@ def test_create_token_tensor_list(glm_tokenizer, tokens):
     assert type(tensor_list) == list
     assert len(tensor_list) == len(tokens)
     assert isinstance(tensor_list[0], torch.LongTensor)
-    assert len(tensor_list[0]) == 1
+    # [5, x], chatglm will add 5 at begin
+    assert len(tensor_list[0]) == 2

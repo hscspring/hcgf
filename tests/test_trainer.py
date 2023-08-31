@@ -65,6 +65,9 @@ def test_trainer(lr, num_epochs, warmup_steps, accumulate_steps):
         "cpu",
         10,
         "lora",
+        (0.9, 0.95),
+        0.01,
+        torch.float16,
     )
     trainer.train(model, train_loader, train_loader)
     if os.path.exists(out_path):
