@@ -264,6 +264,8 @@ class GlmBase:
         assert self.mode == "fsdp", "Only for FSDP"
         assert self.dataloader is not None, "Please `load_data` first"
         assert "batch_size" in params, "batch_size is a must parameter"
+        # huggingface's bfloat16 only for layernorm, it doesn't necessary
+        self.torch_dtype = torch.float16
         def build_tune_params():
             default = {
                 "strategy": "fsdp_zero3",
