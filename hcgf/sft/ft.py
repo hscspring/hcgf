@@ -101,6 +101,8 @@ class GlmBase:
         else:
             self.torch_dtype = torch.float16
         
+        self.torch_dtype = torch.float16
+        
         if torch_dtype is not None:
             self.torch_dtype = torch_dtype
 
