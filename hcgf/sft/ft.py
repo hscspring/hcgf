@@ -203,6 +203,8 @@ class GlmBase:
         pad_id = getattr(tk, "pad_token_id")
         if pad_id is None:
             tk.pad_token_id = default_pad_id
+        
+        # donot use in train, only for inference
         tk.padding_side = "left"
         tk.max_model_input_len = self.max_input_length
         tk.model_name = self.llm_type.value
@@ -441,6 +443,188 @@ class GlmBase:
         else:
             raise NotImplemented
     
+    # def get_generate_config(
+    #     self,
+    #     max_new_tokens: int,
+    #     do_sample: bool,
+    #     num_beams: int,
+    #     temperature: float,
+    #     top_p: float,
+    #     top_k: int,
+    #     repetition_penalty: float,
+    #     pad_token_id: int,
+    #     bos_token_id: int,
+    #     eos_token_id: int,
+    #     logits_processor=None,
+    #     stopping_criteria=None,
+    #     **kwargs
+    # ) -> Dict[str, Any]:
+        
+    #     if logits_processor is None:
+    #         logits_processor = LogitsProcessorList()
+    #     logits_processor.append(InvalidScoreLogitsProcessor())
+    #     if stopping_criteria is None:
+    #         stopping_criteria = StoppingCriteriaList()
+        
+    #     gen_config = GenerationConfig(
+    #         max_new_tokens=max_new_tokens,
+    #         do_sample=do_sample,
+    #         temperature=temperature,
+    #         top_p=top_p,
+    #         top_k=top_k,
+    #         num_beams=num_beams,
+    #         repetition_penalty=repetition_penalty,
+    #         pad_token_id=pad_token_id,
+    #         bos_token_id=bos_token_id,
+    #         eos_token_id=eos_token_id,
+    #     )
+        
+    #     gen_kwargs = {
+    #         "generation_config": gen_config,
+    #         "logits_processor": logits_processor,
+    #         "stopping_criteria": stopping_criteria,
+    #         **kwargs
+    #     }
+    #     return gen_kwargs
+    
+    # def generate(
+    #     self,
+    #     sents: Union[str, List[str]],
+    #     max_new_tokens: int,
+    #     do_sample: bool,
+    #     num_beams: int,
+    #     temperature: float,
+    #     top_p: float,
+    #     top_k: int,
+    #     repetition_penalty: float,
+    #     pad_token_id: int,
+    #     bos_token_id: int,
+    #     eos_token_id: int,
+    #     logits_processor=None,
+    #     stopping_criteria=None,
+    #     **kwargs
+    # ):
+    #     if type(sents) == str:
+    #         sents = [sents]
+    #     inputs = self.tokenizer(
+    #         sents, return_tensors="pt", padding=True
+    #     )
+    #     inputs = inputs.to(self.curr_device)
+    #     gen_kwargs = self.get_generate_config(
+    #         max_new_tokens, do_sample, num_beams, 
+    #         temperature, top_p, top_k, repetition_penalty,
+    #         pad_token_id, bos_token_id, eos_token_id,
+    #         logits_processor, stopping_criteria, 
+    #         **kwargs,
+    #     )
+    #     with torch.cuda.amp.autocast(dtype=self.torch_dtype):
+    #         with torch.no_grad():
+    #             outputs = self.model.generate(
+    #                 inputs,
+    #                 **gen_kwargs,
+    #             )
+    #     batch_out_sents = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
+    #     res = []
+    #     for i, out_s in enumerate(batch_out_sents):
+    #         inp_s = sents[i]
+    #         out_s = out_s.replace(inp_s, "")
+    #         res.append(out_s)
+    #     return res
+
+    # def stream_chat(
+    #     self,
+    #     query: str,
+    #     history: List[Tuple[str, str]] = None,
+    #     max_new_tokens: int = 512,
+    #     do_sample: bool = True,
+    #     num_beams: int = 1,
+    #     temperature: float = 0.95,
+    #     top_p: float = 0.7,
+    #     top_k: int = 50,
+    #     repetition_penalty: float = 1.02,
+    #     logits_processor=None,
+    #     stopping_criteria=None,
+    #     **kwargs
+    # ):
+    #     assert self.llm_type.value == "chatglm", "only support `chatglm`"
+    #     # remain some places for special tokens
+    #     prompt_len = self.max_input_length - max_new_tokens - 8
+    #     "From ChatGLM Model"
+    #     if not history:
+    #         prompt = query
+    #     else:
+    #         prompt = ""
+    #         for i, (old_query, response) in enumerate(history):
+    #             prompt += "[Round {}]\n 问：{}\n 答：{}\n".format(
+    #                 i, old_query, response)
+    #         prompt += "[Round {}]\n 问：{}\n 答：".format(len(history), query)
+    #     prompt = prompt[-prompt_len:]
+    #     inputs = self.tokenizer([prompt], return_tensors="pt")
+    #     inputs = inputs.to(self.curr_device)
+    #     pad_token_id = self.tokenizer.pad_token_id
+    #     bos_token_id = self.tokenizer.bos_token_id
+    #     eos_token_id = self.tokenizer.eos_token_id
+    #     gen_kwargs = self.get_generate_config(
+    #         max_new_tokens, do_sample, num_beams, 
+    #         temperature, top_p, top_k, repetition_penalty,
+    #         pad_token_id, bos_token_id, eos_token_id,
+    #         logits_processor, stopping_criteria, **kwargs,
+    #     )
+    #     with torch.cuda.amp.autocast(dtype=self.torch_dtype):
+    #         with torch.no_grad():
+    #             for outputs in self.model.stream_generate(
+    #                 **inputs, **gen_kwargs
+    #             ):
+    #                 outputs = outputs.tolist()[0][len(inputs["input_ids"][0]):]
+    #                 response = self.tokenizer.decode(outputs)
+    #                 response = self.model.process_response(response)
+    #                 new_history = history + [(query, response)]
+    #                 yield response, new_history
+
+    # def chat(
+    #     self,
+    #     inp: str,
+    #     history: List[Tuple[str, str]] = None,
+    #     max_new_tokens: int = 512,
+    #     do_sample: bool = True,
+    #     num_beams: int = 1,
+    #     temperature: float = 0.95,
+    #     top_p: float = 0.7,
+    #     repetition_penalty: float = 1.02,
+    #     stop: List[str] = []
+    # ):
+    #     assert self.llm_type.value == "chatglm", "only support `chatglm`"
+    #     if not history:
+    #         history = []
+
+    #     if stop:
+    #         stop_tokens = [v for v in stop if v not in self.stop_tokens]
+    #         custom_stop_tensor_list = create_token_tensor_list(
+    #             self.tokenizer, stop_tokens)
+    #         stop_tensor_list = self.builtin_stop_tensor_list + custom_stop_tensor_list
+    #     else:
+    #         stop_tensor_list = self.builtin_stop_tensor_list
+
+    #     custom_stop_list = [
+    #         CustomStoppingCriteria(
+    #             stop_tensor_list,
+    #             self.curr_device)]
+
+    #     response = ""
+    #     for response, history in self.stream_chat(
+    #         inp, history, max_new_tokens,
+    #         top_p=top_p, temperature=temperature,
+    #         stopping_criteria=StoppingCriteriaList(custom_stop_list),
+    #     ):
+    #         ...
+    #     return response, history
+
+    # @property
+    # def curr_device(self) -> torch.device:
+    #     if self.device is None:
+    #         return self.model.device
+    #     return self.device
+    
     def get_generate_config(
         self,
         max_new_tokens: int,
@@ -448,80 +632,70 @@ class GlmBase:
         num_beams: int,
         temperature: float,
         top_p: float,
-        top_k: int,
         repetition_penalty: float,
-        pad_token_id: int,
-        bos_token_id: int,
-        eos_token_id: int,
         logits_processor=None,
         stopping_criteria=None,
         **kwargs
     ) -> Dict[str, Any]:
-        
         if logits_processor is None:
             logits_processor = LogitsProcessorList()
         logits_processor.append(InvalidScoreLogitsProcessor())
         if stopping_criteria is None:
             stopping_criteria = StoppingCriteriaList()
         
-        gen_config = GenerationConfig(
-            max_new_tokens=max_new_tokens,
-            do_sample=do_sample,
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            num_beams=num_beams,
-            repetition_penalty=repetition_penalty,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-        )
-        
         gen_kwargs = {
-            "generation_config": gen_config,
+            "max_length": max_new_tokens,
+            "do_sample": do_sample,
+            "num_beams": num_beams,
+            "temperature": temperature,
+            "top_p": top_p,
+            "repetition_penalty": repetition_penalty,
+            
             "logits_processor": logits_processor,
             "stopping_criteria": stopping_criteria,
             **kwargs
         }
+        """
+        # Glm GenerationConfig
+        GenerationConfig {
+            "_from_model_config": true,
+            "bos_token_id": 130004,
+            "eos_token_id": 130005,
+            "pad_token_id": 3,
+            "transformers_version": "4.28.1"
+        }
+        """
         return gen_kwargs
     
+    @torch.no_grad()
     def generate(
         self,
         sents: Union[str, List[str]],
-        max_new_tokens: int,
-        do_sample: bool,
-        num_beams: int,
-        temperature: float,
-        top_p: float,
-        top_k: int,
-        repetition_penalty: float,
-        pad_token_id: int,
-        bos_token_id: int,
-        eos_token_id: int,
+        max_new_tokens: int = 512,
+        do_sample: bool = True,
+        num_beams: int = 1,
+        temperature: float = 0.2,
+        top_p: float = 0.7,
+        repetition_penalty: float = 1.02,
         logits_processor=None,
         stopping_criteria=None,
         **kwargs
     ):
+        prompt_len = self.max_input_length - max_new_tokens - 8
         if type(sents) == str:
             sents = [sents]
-        inputs = self.tokenizer(
-            sents, return_tensors="pt", padding=True
-        )
+        sents = [v[-prompt_len:] for v in sents]
+        inputs = tokenizer(sents, return_tensors="pt", padding=True)
         inputs = inputs.to(self.curr_device)
         gen_kwargs = self.get_generate_config(
-            max_new_tokens, do_sample, num_beams, 
-            temperature, top_p, top_k, repetition_penalty,
-            pad_token_id, bos_token_id, eos_token_id,
-            logits_processor, stopping_criteria, 
-            **kwargs,
+            max_new_tokens, do_sample, num_beams, temperature, top_p, repetition_penalty,
+            logits_processor, stopping_criteria, **kwargs,
         )
-        with torch.cuda.amp.autocast(dtype=self.torch_dtype):
-            with torch.no_grad():
-                outputs = self.model.generate(
-                    inputs,
-                    **gen_kwargs,
-                )
-        batch_out_sents = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        outputs = self.model.generate(
+            **inputs,
+            **gen_kwargs,
+        )
+        batch_out_sents = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         res = []
         for i, out_s in enumerate(batch_out_sents):
             inp_s = sents[i]
@@ -529,6 +703,7 @@ class GlmBase:
             res.append(out_s)
         return res
 
+    @torch.no_grad()
     def stream_chat(
         self,
         query: str,
@@ -538,13 +713,11 @@ class GlmBase:
         num_beams: int = 1,
         temperature: float = 0.95,
         top_p: float = 0.7,
-        top_k: int = 50,
         repetition_penalty: float = 1.02,
         logits_processor=None,
         stopping_criteria=None,
         **kwargs
     ):
-        assert self.llm_type.value == "chatglm", "only support `chatglm`"
         # remain some places for special tokens
         prompt_len = self.max_input_length - max_new_tokens - 8
         "From ChatGLM Model"
@@ -559,25 +732,18 @@ class GlmBase:
         prompt = prompt[-prompt_len:]
         inputs = self.tokenizer([prompt], return_tensors="pt")
         inputs = inputs.to(self.curr_device)
-        pad_token_id = self.tokenizer.pad_token_id
-        bos_token_id = self.tokenizer.bos_token_id
-        eos_token_id = self.tokenizer.eos_token_id
         gen_kwargs = self.get_generate_config(
-            max_new_tokens, do_sample, num_beams, 
-            temperature, top_p, top_k, repetition_penalty,
-            pad_token_id, bos_token_id, eos_token_id,
+            max_new_tokens, do_sample, num_beams, temperature, top_p, repetition_penalty,
             logits_processor, stopping_criteria, **kwargs,
         )
-        with torch.cuda.amp.autocast(dtype=self.torch_dtype):
-            with torch.no_grad():
-                for outputs in self.model.stream_generate(
-                    **inputs, **gen_kwargs
-                ):
-                    outputs = outputs.tolist()[0][len(inputs["input_ids"][0]):]
-                    response = self.tokenizer.decode(outputs)
-                    response = self.model.process_response(response)
-                    new_history = history + [(query, response)]
-                    yield response, new_history
+        for outputs in self.model.stream_generate(
+            **inputs, **gen_kwargs
+        ):
+            outputs = outputs.tolist()[0][len(inputs["input_ids"][0]):]
+            response = self.tokenizer.decode(outputs)
+            response = self.model.process_response(response)
+            new_history = history + [(query, response)]
+            yield response, new_history
 
     def chat(
         self,
@@ -591,7 +757,6 @@ class GlmBase:
         repetition_penalty: float = 1.02,
         stop: List[str] = []
     ):
-        assert self.llm_type.value == "chatglm", "only support `chatglm`"
         if not history:
             history = []
 
@@ -608,7 +773,6 @@ class GlmBase:
                 stop_tensor_list,
                 self.curr_device)]
 
-        response = ""
         for response, history in self.stream_chat(
             inp, history, max_new_tokens,
             top_p=top_p, temperature=temperature,

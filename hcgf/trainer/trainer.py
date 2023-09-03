@@ -68,9 +68,8 @@ class Trainer:
         time_of_run = get_date_of_run()
         save_file_prefix = f"{self.task_type}-{time_of_run}-ckpt-best"
 
-        # optim_params = get_optim_parameters(model, self.weight_decay)
-        # optimizer = torch.optim.AdamW(optim_params, lr=self.lr, betas=self.adam_betas)
-        optimizer = torch.optim.AdamW(model.parameters(), lr=self.lr)
+        optim_params = get_optim_parameters(model, self.weight_decay)
+        optimizer = torch.optim.AdamW(optim_params, lr=self.lr, betas=self.adam_betas)
 
         if self.accumulate_steps is None:
             accumulate_steps = 1
