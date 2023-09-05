@@ -19,9 +19,6 @@ class LoraModel(BaseModel, BaseMixin):
         self.lora_config = config
         self.model = model
         self._find_and_replace()
-        static = torch.load(pt_path)
-        self.model.load_state_dict(static, strict=False)
-    
         self.mark_only_x_as_trainable("lora_", self.lora_config.bias)
         self.forward = self.model.forward
 

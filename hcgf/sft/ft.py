@@ -666,8 +666,8 @@ class GlmLora(GlmBase):
             self.model = self.load_model(self.model_id)
             self.model = LoraModel(self.model, self.lora_config, pt_path)
             self.model_is_setup = True
-            # if pt_path is not None:
-            #     self._load_pretrained_x(pt_path)
+            if pt_path is not None:
+                self._load_pretrained_x(pt_path)
         return self
 
 
