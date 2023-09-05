@@ -14,14 +14,11 @@ from ..base import BaseModel, BaseMixin
 
 
 class LoraModel(BaseModel, BaseMixin):
-    def __init__(self, model: nn.Module, config: LoraConfig, ckpt_path: Optional[str]):
+    def __init__(self, model: nn.Module, config: LoraConfig):
         super().__init__()
         self.lora_config = config
         self.model = model
         self._find_and_replace()
-        if ckpt_path is not None:
-            static = torch.load(ckpt_path)
-            self.model.load_state_dict(static, strict=False)
         self.mark_only_x_as_trainable("lora_", self.lora_config.bias)
         self.forward = self.model.forward
 

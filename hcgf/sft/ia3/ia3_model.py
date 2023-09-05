@@ -14,14 +14,11 @@ from ..base import BaseModel, BaseMixin
 
 class Ia3Model(BaseModel, BaseMixin):
  
-    def __init__(self, model: nn.Module, config: Ia3Config, ckpt_path: Optional[str]):
+    def __init__(self, model: nn.Module, config: Ia3Config):
         super().__init__()
         self.model = model
         self.ia3_config = config
         self._find_and_replace()
-        if ckpt_path is not None:
-            static = torch.load(ckpt_path)
-            self.model.load_state_dict(static, strict=False)
         self.mark_only_x_as_trainable("ia3")
         self.forward = self.model.forward
 
