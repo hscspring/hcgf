@@ -101,8 +101,6 @@ class GlmBase:
         else:
             self.torch_dtype = torch.float16
         
-        self.torch_dtype = torch.float16
-        
         if torch_dtype is not None:
             self.torch_dtype = torch_dtype
 
@@ -445,8 +443,10 @@ class GlmBase:
     
     @property
     def transformer_block(self) -> str:
-        if self.llm_type.value == "chatglm":
+        if self.llm_type.value in ["chatglm", "chatglm2"]:
             return "GLMBlock"
+        elif self.llm_type.value == "qwen":
+            return "QWenBlock"
         elif self.llm_type.value == "llama":
             return "LlamaDecoderLayer"
         elif self.llm_type.value == "gpt2":
@@ -664,7 +664,7 @@ class GlmLora(GlmBase):
     def load_pretrained(self, pt_path: Optional[str] = None) -> "Self":
         if not self.model_is_setup:
             self.model = self.load_model(self.model_id)
-            self.model = LoraModel(self.model, self.lora_config, pt_path)
+            self.model = LoraModel(self.model, self.lora_config)
             self.model_is_setup = True
             if pt_path is not None:
                 self._load_pretrained_x(pt_path)

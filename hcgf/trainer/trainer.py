@@ -143,7 +143,7 @@ class Trainer:
                 
                 # the loss has already been averaged along batch
                 loss_b = output.loss.detach().float()
-                loss = output.loss #/ accumulate_steps
+                loss = output.loss
                 loss.backward()
                 if step % accumulate_steps == 0:
                     optimizer.step()
