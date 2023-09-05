@@ -178,8 +178,8 @@ class GlmBase:
         static = torch.load(pt_path)
         self.model.load_state_dict(static, strict=False)
     
-    def _load_auto_tokenizer(self, model_id: str):
-        return AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    def _load_auto_tokenizer(self):
+        return AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=True)
     
     def load_tokenizer(self) -> PreTrainedTokenizer:
         default_pad_id = 0
@@ -192,21 +192,21 @@ class GlmBase:
             from transformers import GPT2Tokenizer
             tk = GPT2Tokenizer.from_pretrained(self.model_id)
         elif self.llm_type.value in ["chatglm", "bloom"]:
-            tk = _load_auto_tokenizer(self.model_id)
+            tk = self._load_auto_tokenizer()
             default_pad_id = 3
         elif self.llm_type.value in ["chatglm2"]:
-            tk = _load_auto_tokenizer(self.model_id)
+            tk = self._load_auto_tokenizer()
             tk.bos_token_id = 1
         elif self.llm_type.value == "pangu":
-            tk = _load_auto_tokenizer(self.model_id)
+            tk = self._load_auto_tokenizer()
             default_pad_id = 6
             tk.unk_token_id = 0
             tk.bos_token_id = 9
             tk.eos_token_id = 9
         elif self.llm_type.value in ["baichuan"]:
-            tk = _load_auto_tokenizer(self.model_id)
+            tk = self._load_auto_tokenizer()
         elif self.llm_type.value in ["qwen"]:
-            tk = _load_auto_tokenizer(self.model_id)
+            tk = self._load_auto_tokenizer()
             default_pad_id = tk.eod_id = 151643
             tk.eos_token_id = tk.eod_id = 151643
             tk.bos_token_id = tk.eod_id = 151643
@@ -664,10 +664,10 @@ class GlmLora(GlmBase):
     def load_pretrained(self, pt_path: Optional[str] = None) -> "Self":
         if not self.model_is_setup:
             self.model = self.load_model(self.model_id)
-            self.model = LoraModel(self.model, self.lora_config)
+            self.model = LoraModel(self.model, self.lora_config, pt_path)
             self.model_is_setup = True
-            if pt_path is not None:
-                self._load_pretrained_x(pt_path)
+            # if pt_path is not None:
+            #     self._load_pretrained_x(pt_path)
         return self
 
 
