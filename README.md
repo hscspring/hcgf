@@ -10,7 +10,7 @@ pip install hcgf
 pip install -r requirements.txt
 ```
 
-建议使用PyTorch2.0
+建议使用PyTorch2.0，未支持多节点。
 
 
 ## 微调训练

@@ -7,10 +7,9 @@ https://github.com/HamidShojanazeri/examples/blob/FSDP_example/FSDP/T5_training.
 https://pytorch.org/docs/stable/fsdp.html
 """
 import os
-import functools
+from functools import partial
 from typing import Callable, Optional
-
-from looseversion import LooseVersion
+from pkg_resources import packaging
 
 import torch
 import torch.nn as nn
@@ -25,6 +24,11 @@ from torch.distributed.fsdp.wrap import (
     transformer_auto_wrap_policy,
     lambda_auto_wrap_policy,
     _or_policy,
+)
+from torch.distributed.algorithms._checkpoint.checkpoint_wrapper import (
+    checkpoint_wrapper,
+    CheckpointImpl,
+    apply_activation_checkpointing,
 )
 
 from hcgf.utils import get_module_class_from_name
@@ -58,6 +62,7 @@ def setup(rank, world_size):
     os.environ["MASTER_PORT"] = "12356"
     dist.init_process_group("nccl", rank=rank, world_size=world_size)
 
+
 def cleanup():
     dist.destroy_process_group()
 
@@ -66,7 +71,7 @@ def check_bf16_ready() -> bool:
     return (
         torch.version.cuda
         and torch.cuda.is_bf16_supported()
-        and LooseVersion(torch.version.cuda) >= "11.0"
+        and packaging.version.parse(torch.version.cuda).release >= (11, 0)
         and dist.is_nccl_available()
         and torch.cuda.nccl.version() >= (2, 10)
     )
@@ -93,23 +98,36 @@ def get_transformer_wrap_policy(model: nn.Module, module_name: str) -> Callable:
             return True
         return False
 
-    lambda_policy = functools.partial(
+    lambda_policy = partial(
         lambda_auto_wrap_policy, lambda_fn=lambda_policy_fn
     )
     transformer_cls_to_wrap = set()
     tf_cls = get_module_class_from_name(model, module_name)
     transformer_cls_to_wrap.add(tf_cls)
-    tf_wrap_policy = functools.partial(
+    tf_wrap_policy = partial(
         transformer_auto_wrap_policy, transformer_layer_cls=transformer_cls_to_wrap
     )
 
     # sized_wrap_policy = functools.partial(
     #     size_based_auto_wrap_policy, min_num_params=1e8
     # )
-    auto_wrap_policy = functools.partial(
+    auto_wrap_policy = partial(
         _or_policy, policies=[lambda_policy, tf_wrap_policy]
     )
     return auto_wrap_policy
+
+
+def apply_fsdp_checkpointing(model: nn.Module, module_name: str):
+    non_reentrant_wrapper = partial(
+        checkpoint_wrapper,
+        offload_to_cpu=False,
+        checkpoint_impl=CheckpointImpl.NO_REENTRANT,
+    )
+    tf_cls = get_module_class_from_name(model, module_name)
+    check_fn = lambda submodule: isinstance(submodule, tf_cls)
+    apply_activation_checkpointing(
+        model, checkpoint_wrapper_fn=non_reentrant_wrapper, check_fn=check_fn
+    )
 
 
 def get_sharding_strategy(strategy: str) -> ShardingStrategy:

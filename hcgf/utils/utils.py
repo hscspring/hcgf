@@ -1,5 +1,6 @@
 from typing import Dict, List
 from datetime import datetime
+from numbers import Number
 
 import torch
 import torch.nn as nn
@@ -155,3 +156,12 @@ def get_optim_parameters(
         },
     ]
     return ps
+
+
+def format_mem_to(num: Number, level: str = "g"):
+    if level == "g":
+        unit = 3
+    else:
+        unit == 1
+    byte_unit = 1024 ** unit
+    return round(num / byte_unit, ndigits=4)

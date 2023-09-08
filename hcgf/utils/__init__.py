@@ -8,4 +8,5 @@ from .utils import (
     format_metrics_to_gb,
     get_model_type_from,
     get_optim_parameters,
+    format_mem_to,
 )

@@ -33,6 +33,7 @@ from ..trainer.fsdp import (
     get_sharding_strategy,
     check_bf16_ready,
     get_mp_policy, 
+    apply_fsdp_checkpointing,
 )
 from ..utils import (
     print_layer_info, print_trainable_parameters, 
@@ -280,7 +281,7 @@ class GlmBase:
         assert self.dataloader is not None, "Please `load_data` first"
         assert "batch_size" in params, "batch_size is a must parameter"
         
-        # huggingface's bfloat16 only for layernorm, it doesn't necessary to fix using float16
+        # TODO: support bfloat16?
         self.torch_dtype = torch.float16
         
         def build_tune_params():
@@ -324,11 +325,15 @@ class GlmBase:
             self.model,
             auto_wrap_policy=auto_wrap_policy,
             sharding_strategy=sharding_strategy,
-            cpu_offload=CPUOffload(offload_params=True),
+            cpu_offload=CPUOffload(offload_params=False),
             mixed_precision=mp_policy,
             device_id=torch.cuda.current_device(),
-            # limit_all_gathers=True,
+            limit_all_gathers=True,
         )
+        # NOTE: ?There are still issues for ckpt+FSDP: https://github.com/pytorch/pytorch/issues/82203
+        if args.task_type == "sft":
+            apply_fsdp_checkpointing(self.model, self.transformer_block)
+
         if rank == 0:
             print_layer_info(self.model)
             print_trainable_parameters(self.model)
@@ -387,8 +392,8 @@ class GlmBase:
         
         print_trainable_parameters(self.model)
 
-        # it depends
-        # self.model.gradient_checkpointing_enable()
+        if task_type == "sft":
+            self.model.gradient_checkpointing_enable()
 
         # turn on when infer
         self.model.config.use_cache = False

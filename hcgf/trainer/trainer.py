@@ -16,7 +16,12 @@ from torch.utils.data import DataLoader
 from transformers import get_linear_schedule_with_warmup
 import pnlp
 
-from ..utils import get_x_state_dict, get_date_of_run, get_optim_parameters
+from ..utils import (
+    get_x_state_dict, 
+    get_date_of_run, 
+    get_optim_parameters,
+    format_mem_to,
+)
 
 
 class Trainer:
@@ -205,16 +210,20 @@ class Trainer:
             
             ##### Summary Epoch #####
             if rank == 0:
+                alloc_mem = format_mem_to(torch.cuda.memory_allocated(), "g")
+                rever_mem = format_mem_to(torch.cuda.memory_reserved(), "g")
                 secs = int(time.perf_counter() - start_time)
                 mins = secs / 60
                 secs = secs % 60
                 msg = f"Epoch: {epoch} | time in {mins:.1f} minutes, {secs} seconds \n"
                 msg += f"\tEpoch TrainLoss: {train_loss[0] / batch_num:.4f}  \n"
                 msg += f"\tEpoch ValidLoss: {val_loss:.4f}  ValidPpl: {val_ppl}"
+                msg += f"\tMemory Alloc: {alloc_mem}  Meory Reserved: {rever_mem}"
                 print(msg)
 
             if flag:
                 break
+        
         del optimizer
         del model
 
