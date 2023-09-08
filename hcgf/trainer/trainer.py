@@ -124,6 +124,7 @@ class Trainer:
         total_step = 0
         last_improve = 0
         flag = False
+        optimizer.zero_grad()
         for epoch in range(1, self.num_epochs+1):
             model.train()
             if is_distributed:
@@ -217,8 +218,8 @@ class Trainer:
                 secs = secs % 60
                 msg = f"Epoch: {epoch} | time in {mins:.1f} minutes, {secs} seconds \n"
                 msg += f"\tEpoch TrainLoss: {train_loss[0] / batch_num:.4f}  \n"
-                msg += f"\tEpoch ValidLoss: {val_loss:.4f}  ValidPpl: {val_ppl}"
-                msg += f"\tMemory Alloc: {alloc_mem}  Meory Reserved: {rever_mem}"
+                msg += f"\tEpoch ValidLoss: {val_loss:.4f}  ValidPpl: {val_ppl} \n"
+                msg += f"\tMemory Alloc: {alloc_mem}G  Meory Reserved: {rever_mem}G"
                 print(msg)
 
             if flag:
