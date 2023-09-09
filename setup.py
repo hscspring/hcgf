@@ -9,10 +9,10 @@ with open('requirements.txt', 'r', encoding='utf-8') as f:
 
 setuptools.setup(
     name="hcgf",
-    version="0.2.1",
+    version="0.4.0",
     author="Yam",
     author_email="haoshaochun@gmail.com",
-    description="Humanable ChatGPT/GLM Fine-tuning.",
+    description="Humanable Chat Generative-model Fine-tuning.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/hscspring/hcgf",

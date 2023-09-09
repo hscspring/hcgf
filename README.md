@@ -1,21 +1,36 @@
-先clone仓库或pip安装：
+## Install
 
 ```bash
 pip install hcgf
 ```
 
-需要的依赖在`requirements.txt`中，通过下面命令安装：
+安装依赖：
 
 ```
 pip install -r requirements.txt
 ```
 
-建议使用PyTorch2.0，未支持多节点。
+
+- 建议使用PyTorch2.0。
+- 未支持多节点。
 
 
-## 微调训练
+## Fine-tuning
 
-### 准备数据
+支持的模型：
+
+- [ChatGLM](https://huggingface.co/THUDM/chatglm-6b)
+- [ChatGLM2](https://huggingface.co/THUDM/chatglm2-6b)
+- [Qwen](https://huggingface.co/Qwen/Qwen-7B-Chat)
+- [Linly LLaMA](https://huggingface.co/Linly-AI/ChatFlow-7B)
+- [BELLE LLaMA](https://huggingface.co/BelleGroup/BELLE-LLaMA-7B-2M-enc)
+- [Ziya LLaMA](https://huggingface.co/IDEA-CCNL/Ziya-LLaMA-13B-v1.1)
+- [Baichuan LLaMA](https://huggingface.co/baichuan-inc/Baichuan-7B)
+- [Bloom](https://huggingface.co/bigscience/bloomz-7b1-mt)
+- [Pangu](https://huggingface.co/imone/pangu_2_6B)
+
+
+### Dataset
 
 每一行一个dict的`.json`文件，必须包含`prompt`和`completion`两个字段。示例如下：
 
@@ -23,7 +38,7 @@ pip install -r requirements.txt
 {"prompt": "你是谁？", "completion": "不告诉你。"}
 ```
 
-### 分布式微调
+### Distributed Fine-tuning
 
 使用PyTorch的FSDP训练，支持Zero3、Zero2和DDP模式，使用方法请参考帮助文档：
 
@@ -45,8 +60,8 @@ hcgf_tune --model THUDM/chatglm-6b --data_path path/to/train_data.json
 - fsdp_zero3：命令行模式默认策略，FULL_SHARD，参数、梯度、优化器状态SHARD，慢但是省显存，数据并行。
 - fsdp_zero2：GRAD_OP_SHARD，梯度、优化器状态SHARD，比上面那个快一些，数据并行。
 - mpdp(ddp)：NO_SHARD，类似DDP，就是把模型分别加载到每张卡上，比上面2个都快，数据并行。
-- mpds(8bit)：8bit模式（下面的《8bit微调》），模型被分到多个卡（甚至CPU）上，没有数据并行，很慢。
-- msds(single_gpu)：单卡模式（下面的《正常微调》），能跑起来的情况下比较快。
+- mpds(8bit)：8bit模式（下面的《8bit Fine-tuning》），模型被分到多个卡（甚至CPU）上，没有数据并行，很慢。
+- msds(single_gpu)：单卡模式（下面的《Single Device Fine-tuning》），能跑起来的情况下比较快。
 
 | 卡数 | 显存           | 训练数据 | 策略                  |
 | ---- | -------------- | -------- | --------------------- |
@@ -64,7 +79,7 @@ hcgf_tune --model THUDM/chatglm-6b --data_path path/to/train_data.json
 
 
 
-### 正常微调
+### Single Device Fine-tuning
 
 至少需要一张16G显存的卡。如果不指定显卡，默认为`cuda`。
 
@@ -100,7 +115,7 @@ hcgf_tune strategy msds --model THUDM/chatglm-6b --data_path path/to/train_data.
 ```
 
 
-### 8bit微调
+### 8bit Fine-tuning
 
 至少需要一张12G显存的卡。不指定device。只需要初始化时改一下即可，其他操作和上面正常微调一样。
 
@@ -252,6 +267,9 @@ GlmLora("/path/to/huggingface/models--THUDM--chatglm-6b/snapshots/<id>/")
 
 ## 更新日志
 
+- **v0.4.0** `20230909`
+  - 支持Qwen、ChatGLM2、Baichuan等
+  - 支持IA3微调
 - **v0.3.0** `20230526`
   - 支持LLaMA（包括Native、Alpaca、Ziya等）
 - **v0.2.0** `20230513`

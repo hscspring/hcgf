@@ -1,5 +1,4 @@
 cpm_kernels
 transformers
 pnlp
-looseversion
 gradio
