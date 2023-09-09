@@ -38,18 +38,18 @@ pip install -r requirements.txt
 {"prompt": "你是谁？", "completion": "不告诉你。"}
 ```
 
-### Distributed Fine-tuning
+### Command Fine-tuning
 
-使用PyTorch的FSDP训练，支持Zero3、Zero2和DDP模式，使用方法请参考帮助文档：
+支持分布式Zero3、Zero2和DDP模式，使用方法请参考帮助文档。
 
 ```bash
 hcgf_tune -h
 ```
 
-至少要指定`model`和`data_path`参数，如下：
+至少要指定`model`和`data_path`参数，如下。
 
 ```bash
-hcgf_tune --model THUDM/chatglm-6b --data_path path/to/train_data.json
+hcgf_tune --model THUDM/chatglm-6b --data_path path/to/train_data.json lora
 ```
 
 首先要理解一下，模型训练时，除了模型（也就是参数）占用的空间外，还有优化器、梯度等会占用显存。
@@ -74,8 +74,10 @@ hcgf_tune --model THUDM/chatglm-6b --data_path path/to/train_data.json
 
 
 注意事项：
-- 这里显存是在训练模式下的，和推理模式占用不同，可参考下面的《配置》。推理只支持后两种模式。
-- FSDP模式下可能还没有单卡快（单卡跑得起的时候），这是正常的，因为FSDP对数据分片了，而且为了更大限度地使用显存，还把一些数据倒腾到CPU了。
+- 这里显存是在训练模式下的，和推理模式占用不同，可参考下面的《Configuration》。推理只支持后两种模式。
+- FSDP模式下可能还没有单卡快（单卡跑得起的时候），这是正常的，因为FSDP对数据分片了，而且为了更大限度地使用显存，还可能需要把一些数据倒腾到CPU。
+- 分布式训练下，batch_size其实是per_device_batch_size，真正的batch_size相当于`device_num×per_device_batch_size`。也就是说，同样的batch_size、数据和配置下，单卡比多卡更新的次数多。
+- 如果有accumulate_steps参数，则需要再乘以它才是真正更新参数的batch_size。
 
 
 
@@ -110,8 +112,9 @@ gl.load_pretrained("/path/to/lora_pt").load_data("/path/to/new_data.json").tune(
 
 当然，也可以使用`hcgf_tune`:
 
+
 ```bash
-hcgf_tune strategy msds --model THUDM/chatglm-6b --data_path path/to/train_data.json
+hcgf_tune strategy msds --model THUDM/chatglm-6b --data_path path/to/train_data.json lora
 ```
 
 
@@ -121,6 +124,7 @@ hcgf_tune strategy msds --model THUDM/chatglm-6b --data_path path/to/train_data.
 
 需要安装依赖: `bitsandbytes`
 
+
 ```python
 gl = hcgf.GlmLora("THUDM/chatglm-6b", load_in_8bit=True)
 ```
@@ -128,26 +132,29 @@ gl = hcgf.GlmLora("THUDM/chatglm-6b", load_in_8bit=True)
 
 当然，也可以使用`hcgf_tune`:
 
+
 ```bash
-hcgf_tune strategy mpds --model THUDM/chatglm-6b --data_path path/to/train_data.json
+hcgf_tune strategy mpds --model THUDM/chatglm-6b --data_path path/to/train_data.json lora
 ```
 
-### 继续微调
+### Continually Fine-tuning
 
 先加载之前的`pt`文件，然后加载数据微调。
+
 
 ```python
 gl.load_pretrained("/path/to/lora_pt").load_data("/path/to/new_data.json").tune()
 ```
 
-### 演示Demo/推理
+### Demo/Inference
 
 请执行`hcgf_infer -h`查看帮助。
 
 
-### 参数说明
+### Parameters
 
 主要方法参数，有值的表示默认值。
+
 
 ```python
 load_data(
@@ -186,13 +193,13 @@ chat(
 )
 ```
 
-Best Practice:
 
-- `tune`: 如果内存不够可以调小batch_size，同时增加accumulate_steps，一般是batch_size的整数倍；
-- `chat/generate`: 一般只需调整`temerature`；
+Better Practice:
+
+- 一般只需调整`temerature`。
 
 
-### 配置
+### Configuration
 
 有几个影响显存的参数可以配置：`max_seq_len`，`batch_size`。
 
@@ -234,9 +241,9 @@ gl
 
 使用小模型（如BERT等）训练。
 
-### 训练
+### Training
 
-### 准备数据
+### Dataset
 
 需要pair对数据，计算logits过程和普通预训练模型一样（一个Batch多个pair对）；计算loss时属于同一个pair对的logits放一块算。
 
@@ -244,7 +251,7 @@ gl
 
 
 
-## 测试
+## Test
 
 ```bash
 # 全部测试
@@ -256,7 +263,7 @@ python -m pytest -m "not slow"
 ```
 
 
-## 其他说明
+## Other
 
 如果遇到加载超时，可以直接load本地cache下的模型：
 
@@ -265,7 +272,7 @@ GlmLora("/path/to/huggingface/models--THUDM--chatglm-6b/snapshots/<id>/")
 ```
 
 
-## 更新日志
+## ChangeLog
 
 - **v0.4.0** `20230909`
   - 支持Qwen、ChatGLM2、Baichuan等
