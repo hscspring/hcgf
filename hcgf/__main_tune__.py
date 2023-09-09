@@ -16,7 +16,7 @@ def main():
     )
     parser.add_argument(
         "--data_path", type=str, default=None, metavar="FILE", required=True,
-        help="[dataset] training data path, should be a text file where each line contains a json with two keys: `prompt` and `completion` (default: None)"
+        help="[dataset] training data path, should be a text file where each line contains a json with two keys: `prompt` and `completion`, `instruction` is also supported (default: None)"
     )
     parser.add_argument(
         "--max_seq_len", type=int, default=512, metavar="N",
