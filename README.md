@@ -1,6 +1,6 @@
 # hcgf
 
-A humanable Chatg Generative-model Fine-tuning tool.
+A Humanable Chat Generative-model Fine-tuning tool.
 
 
 ## Install
