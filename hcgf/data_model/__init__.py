@@ -71,7 +71,6 @@ class LlmType(Enum):
     
     qwen = LlmValue("qwen")
     chatglm = LlmValue("chatglm")
-    chatglm2 = LlmValue("chatglm2")
     llama_native = LlmValue("llama")
     llama_alpaca = LlmValue("llama")
     llama_ziya = LlmValue("llama")

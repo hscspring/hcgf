@@ -25,7 +25,6 @@ pip install -r requirements.txt
 支持的模型：
 
 - [ChatGLM](https://huggingface.co/THUDM/chatglm-6b)
-- [ChatGLM2](https://huggingface.co/THUDM/chatglm2-6b)
 - [Qwen](https://huggingface.co/Qwen/Qwen-7B-Chat)
 - [Linly LLaMA](https://huggingface.co/Linly-AI/ChatFlow-7B)
 - [BELLE LLaMA](https://huggingface.co/BelleGroup/BELLE-LLaMA-7B-2M-enc)
