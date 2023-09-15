@@ -35,7 +35,14 @@ class LoraConfigLoader:
 
     @property
     def chatglm2(self):
-        return self.chatglm
+        return LoraConfig(
+            target_modules=["query_key_value"],
+            r=self.lora_r,
+            lora_alpha=self.lora_alpha,
+            lora_dropout=self.lora_dropout,
+            enable_lora=None,
+            bias="none"
+        )
     
     @property
     def qwen(self):

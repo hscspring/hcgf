@@ -95,7 +95,8 @@ def get_model_type_from(model_id: str) -> LlmType:
     if "qwen" in model_id:
         mt = LlmType.qwen.val
     elif "chatglm2" in model_id:
-        mt = LlmType.chatglm2.val
+        msg = "ChatGLM2 used mqa, Lora doesn't works well."
+        raise ValueError(msg)
     elif "chatglm" in model_id:
         mt = LlmType.chatglm.val
     
@@ -127,8 +128,7 @@ def get_model_type_from(model_id: str) -> LlmType:
     elif "baichuan" in model_id:
         return LlmType.baichuan.val
     else:
-        msg = f"Unsupported model: {model_id}, only support chatglm or llama. "
-        msg += "Your input must contain either of them"
+        msg = f"Unsupported model: {model_id}"
         raise ValueError(msg)
     return mt
 
