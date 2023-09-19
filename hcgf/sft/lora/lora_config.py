@@ -36,7 +36,7 @@ class LoraConfigLoader:
     @property
     def chatglm2(self):
         return LoraConfig(
-            target_modules=["query_key_value"],
+            target_modules=["query_key_value", "dense"], #"dense_h_to_4h", "dense_4h_to_h"],
             r=self.lora_r,
             lora_alpha=self.lora_alpha,
             lora_dropout=self.lora_dropout,
@@ -57,7 +57,7 @@ class LoraConfigLoader:
     
     def get_base_gpt_config(self):
         return LoraConfig(
-            target_modules=["q_proj", "v_proj"],
+            target_modules=["q_proj", "v_proj"], # "k_proj", "o_proj", "up_proj", "down_proj"],
             r=self.lora_r,
             lora_alpha=self.lora_alpha,
             lora_dropout=self.lora_dropout,

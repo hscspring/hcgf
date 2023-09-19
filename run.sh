@@ -1,6 +1,6 @@
 python main.py \
     --strategy mpds \
-    --model ../cache/huggingface/models--THUDM--chatglm2-6b/snapshots/b1502f4f75c71499a3d566b14463edd62620ce9f/ \
+    --model ../llama.cpp/llama/7B-ChatFlow/ \
     --data_path ./data/llm_paper_train.json \
     --max_seq_len 200 \
     --batch_size 8 \
