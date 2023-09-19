@@ -9,7 +9,7 @@ with open('requirements.txt', 'r', encoding='utf-8') as f:
 
 setuptools.setup(
     name="hcgf",
-    version="0.4.1",
+    version="0.4.2",
     author="Yam",
     author_email="haoshaochun@gmail.com",
     description="Humanable Chat Generative-model Fine-tuning.",

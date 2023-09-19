@@ -95,8 +95,9 @@ def get_model_type_from(model_id: str) -> LlmType:
     if "qwen" in model_id:
         mt = LlmType.qwen.val
     elif "chatglm2" in model_id:
-        msg = "ChatGLM2 used mqa, Lora doesn't works well."
-        raise ValueError(msg)
+        msg = "ChatGLM2 used mqa, Lora doesn't work well."
+        # raise ValueError(msg)
+        mt = LlmType.chatglm2.val
     elif "chatglm" in model_id:
         mt = LlmType.chatglm.val
     
