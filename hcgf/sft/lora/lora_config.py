@@ -36,7 +36,7 @@ class LoraConfigLoader:
     @property
     def chatglm2(self):
         return LoraConfig(
-            target_modules=["query_key_value", "dense"], #"dense_h_to_4h", "dense_4h_to_h"],
+            target_modules=["query_key_value", "dense", "dense_h_to_4h", "dense_4h_to_h"],
             r=self.lora_r,
             lora_alpha=self.lora_alpha,
             lora_dropout=self.lora_dropout,
@@ -47,21 +47,11 @@ class LoraConfigLoader:
     @property
     def qwen(self):
         return LoraConfig(
-            target_modules=["c_attn"],
+            target_modules=["c_attn", "c_proj", "w1", "w2"],
             r=self.lora_r,
             lora_alpha=self.lora_alpha,
             lora_dropout=self.lora_dropout,
-            enable_lora=[True, False, True],
-            bias="none"
-        )
-    
-    def get_base_gpt_config(self):
-        return LoraConfig(
-            target_modules=["q_proj", "v_proj"], # "k_proj", "o_proj", "up_proj", "down_proj"],
-            r=self.lora_r,
-            lora_alpha=self.lora_alpha,
-            lora_dropout=self.lora_dropout,
-            enable_lora=None,
+            enable_lora=None, #[True, False, True],
             bias="none"
         )
     
@@ -78,11 +68,25 @@ class LoraConfigLoader:
     
     @property
     def pangu(self):
-        return self.get_base_gpt_config()
+        return LoraConfig(
+            target_modules=["q_proj", "v_proj"],
+            r=self.lora_r,
+            lora_alpha=self.lora_alpha,
+            lora_dropout=self.lora_dropout,
+            enable_lora=None,
+            bias="none"
+        )
 
     @property
     def llama(self):
-        return self.get_base_gpt_config()
+        return LoraConfig(
+            target_modules=["q_proj", "v_proj", "k_proj", "o_proj", "up_proj", "down_proj"],
+            r=self.lora_r,
+            lora_alpha=self.lora_alpha,
+            lora_dropout=self.lora_dropout,
+            enable_lora=None,
+            bias="none"
+        )
     
     @property
     def baichuan(self):
